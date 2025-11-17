@@ -1,0 +1,203 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TripRex Airline Web API Documentation</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 2em;
+            line-height: 1.5;
+            background-color: #f7f9fc;
+            color: #222;
+        }
+
+        h1, h2 {
+            color: #2a3f78;
+        }
+
+        code, pre {
+            background: #eef;
+            padding: 2px 5px;
+            border-radius: 3px;
+        }
+
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 1em 0;
+        }
+
+        th, td {
+            border: 1px solid #ccc;
+            padding: 8px;
+            text-align: left;
+        }
+
+        th {
+            background-color: #e0e6f6;
+        }
+
+        .endpoint {
+            background: #fff;
+            border-left: 5px solid #2a3f78;
+            padding: 1em;
+            margin-bottom: 2em;
+        }
+    </style>
+</head>
+<body>
+    <h1>TripRex Airline Web API</h1>
+    <p>
+        <strong>Author:</strong> Mariam Khan<br>
+        <strong>Course:</strong> CIS 3342<br>
+        <strong>Term:</strong> Fall 2025<br>
+        <strong>Published Path:</strong> <code>/Fall2025/3342_tuo90411/WebAPI/</code>
+    </p>
+
+    <p>
+        This Web API provides access to airline flight data, carrier information, and reservation functionality.
+        It is designed for integration with travel booking applications such as <em>TripRex</em>.
+    </p>
+
+    <hr>
+    <hr>
+
+    <h2>Available Endpoints</h2>
+
+    <div class="endpoint">
+        <h3>1️⃣ GetAirCarriers</h3>
+        <p>
+            <strong>Method:</strong> GET<br>
+            <strong>URL:</strong> <code>/api/Flights/GetAirCarriers</code>
+        </p>
+
+        <table>
+            <tr><th>Parameter</th><th>Type</th><th>Description</th></tr>
+            <tr><td>departureCity</td><td>string</td><td>Name of departure city</td></tr>
+            <tr><td>departureState</td><td>string</td><td>Name of departure state</td></tr>
+            <tr><td>arrivalCity</td><td>string</td><td>Name of arrival city</td></tr>
+            <tr><td>arrivalState</td><td>string</td><td>Name of arrival state</td></tr>
+        </table>
+
+        <p><strong>Returns:</strong> List of air carriers with ID, name, phone, email, and description.</p>
+
+        <pre>{
+  "AirCarrierID": 8,
+  "AirCarrierName": "Keystone Airways",
+  "Phone": "555-4321",
+  "Email": "contact@keystoneair.com",
+  "Description": "Affordable domestic airline"
+}</pre>
+    </div>
+
+    <div class="endpoint">
+        <h3>2️⃣ GetFlights</h3>
+        <p>
+            <strong>Method:</strong> GET<br>
+            <strong>URL:</strong> <code>/api/Flights/GetFlights</code>
+        </p>
+
+        <table>
+            <tr><th>Parameter</th><th>Type</th><th>Description</th></tr>
+            <tr><td>airCarrierId</td><td>int</td><td>Air carrier ID</td></tr>
+            <tr><td>departureCity</td><td>string</td><td>Departure city name</td></tr>
+            <tr><td>departureState</td><td>string</td><td>Departure state</td></tr>
+            <tr><td>arrivalCity</td><td>string</td><td>Arrival city name</td></tr>
+            <tr><td>arrivalState</td><td>string</td><td>Arrival state</td></tr>
+        </table>
+
+        <p><strong>Returns:</strong> List of available flights and seat prices for that carrier.</p>
+
+        <pre>{
+  "FlightID": 16,
+  "AirCarrierName": "Keystone Airways",
+  "FlightNumber": "KS313",
+  "DepartCode": "PHL",
+  "ArriveCode": "LAS",
+  "DepartureTime": "2025-10-27T12:00:00",
+  "ArrivalTime": "2025-10-27T14:00:00",
+  "ClassCode": "ECO",
+  "Price": 199.99
+}</pre>
+    </div>
+
+    <div class="endpoint">
+        <h3>3️⃣ FindFlights</h3>
+        <p>
+            <strong>Method:</strong> POST<br>
+            <strong>URL:</strong> <code>/api/Flights/FindFlights</code>
+        </p>
+
+        <p><strong>Body Example:</strong></p>
+        <pre>{
+  "FromCode": "PHL",
+  "ToCode": "LAS",
+  "DepartDate": "2025-10-27",
+  "ClassCode": "ECO",
+  "MinPrice": 100,
+  "MaxPrice": 400
+}</pre>
+
+        <p><strong>Returns:</strong> Flights from any carrier matching given criteria.</p>
+    </div>
+
+    <div class="endpoint">
+        <h3>4️⃣ FilterFlightsByCarrier</h3>
+        <p>
+            <strong>Method:</strong> POST<br>
+            <strong>URL:</strong> <code>/api/Flights/FilterFlightsByCarrier</code>
+        </p>
+
+        <p><strong>Body Example:</strong></p>
+        <pre>{
+  "AirCarrierID": 8,
+  "Requirements": {
+    "FromCode": "PHL",
+    "ToCode": "LAS",
+    "DepartDate": "2025-10-27",
+    "ClassCode": "ECO",
+    "MinPrice": 100,
+    "MaxPrice": 500
+  }
+}</pre>
+
+        <p><strong>Returns:</strong> Flights that meet criteria for one carrier only.</p>
+    </div>
+
+    <div class="endpoint">
+        <h3>5️⃣ Reserve</h3>
+        <p>
+            <strong>Method:</strong> POST<br>
+            <strong>URL:</strong> <code>/api/Flights/Reserve</code>
+        </p>
+
+        <p><strong>Body Example:</strong></p>
+        <pre>{
+  "AirCarrierID": 8,
+  "Flight": {
+    "FlightID": 16,
+    "RoundTrip": false
+  },
+  "Customer": {
+    "FullName": "Alex Johnson",
+    "Email": "alex.johnson@example.com",
+    "Phone": "555-555-5555"
+  },
+  "TravelSiteID": "TripRex",
+  "TravelSiteAPIToken": "ABC123TOKEN"
+}</pre>
+
+        <p><strong>Returns:</strong> ReservationID (integer) representing a successful booking.</p>
+
+        <pre>7</pre>
+    </div>
+
+    <hr>
+    <p>
+        <strong>Note:</strong> All methods use stored procedures with SQL typed parameters for security.
+        The JSON structures above represent the data bindings used for data display and integration.
+    </p>
+</body>
+</html>

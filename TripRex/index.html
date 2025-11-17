@@ -1,0 +1,103 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>My Course Projects</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <style>
+        :root {
+            --overlay: rgba(0,0,0,.45);
+        }
+
+        .hero {
+            background: linear-gradient(var(--overlay),var(--overlay)), url("https://t4.ftcdn.net/jpg/07/48/96/37/360_F_748963705_zOjrDKA12bmdmVrMm16ys884bIO57iPC.jpg") center/cover no-repeat;
+            color: #fff;
+            padding: 4rem 0;
+        }
+
+        .card-img-top {
+            height: 150px;
+            object-fit: cover;
+        }
+    </style>
+</head>
+<body>
+    <header class="hero text-center">
+        <div class="container">
+            <h1 class="display-6 fw-bold">My Web Dev Course Projects</h1>
+        </div>
+    </header>
+
+    <main class="container my-5">
+        <div class="d-flex align-items-center justify-content-between mb-3">
+            <h2 class="h4 mb-0">Projects</h2>
+            <a class="btn btn-sm btn-outline-secondary" href="#about">About</a>
+        </div>
+
+        <div class="row g-4">
+            <!-- Pizza Shop Card -->
+            <div class="col-12 col-md-6 col-lg-4">
+                <div class="card h-100 shadow-sm">
+                    <img src="https://img.freepik.com/premium-vector/pizza-shop-restaurant-cartoon-vector-icon-illustration-food-building-icon-isolated-flat-vector_138676-13832.jpg"
+                         class="card-img-top" alt="Pizza on a wooden board" loading="lazy">
+                    <div class="card-body">
+                        <h5 class="card-title mb-1">Pizza Shop (WebForms)</h5>
+                        <p class="card-text small text-muted mb-3">Build-your-own pizza with VIP rewards & order confirmation.</p>
+                        <div class="d-flex gap-2">
+                            <a href="PizzaOrder.aspx" class="btn btn-primary btn-sm">Open Project</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- TripRex Card -->
+            <div class="col-12 col-md-6 col-lg-4">
+                <div class="card h-100 shadow-sm border-success">
+                    <img src="Images/Tiny.png"
+                         class="card-img-top p-3"
+                         alt="TripRex Logo"
+                         style="object-fit: contain; height: 180px;"
+                         loading="lazy" />
+
+
+
+                    <div class="card-body text-center">
+                        <h5 class="card-title mb-1 text-success fw-semibold">TripRex</h5>
+                        <p class="card-text small text-muted mb-3">
+                            Travel booking dashboard and Web API for airline reservations.
+                        </p>
+                        <div class="d-flex justify-content-center flex-wrap gap-2">
+                            <a href="Dashboard.aspx" class="btn btn-primary btn-sm">Open Dashboard</a>
+                            <a href="WebAPI/WebAPI.html" class="btn btn-outline-primary btn-sm">View Web API Docs</a>
+                            <a href="https://cis-iis2.temple.edu/Fall2025/CIS3342_tuo90411/WebAPI/index.html" class="btn btn-outline-primary btn-sm">View Swagger API Docs</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+
+
+            <section id="about" class="mt-5">
+                <h3 class="h5">About This Page</h3>
+                <p class="text-muted">
+                    This landing page is a simple directory for my course projects.
+                    Each project demonstrates web application development, APIs, and data integration concepts from CIS 3342.
+                </p>
+            </section>
+</main>
+
+    <footer class="bg-light border-top py-3">
+        <div class="container d-flex flex-column flex-md-row justify-content-between align-items-center">
+            <small class="text-muted">© <span id="year"></span> My Course Projects</small>
+            <div class="d-flex gap-2">
+                <a href="PizzaOrder.aspx" class="btn btn-sm btn-primary">Pizza Shop</a>
+                <a href="Dashboard.aspx" class="btn btn-sm btn-outline-primary">TripRex</a>
+            </div>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>document.getElementById('year').textContent = new Date().getFullYear();</script>
+</body>
+</html>
