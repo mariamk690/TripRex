@@ -1,0 +1,70 @@
+﻿@model CoreTripRex.Models.CurrentPackage.CurrentPackageVM
+@{
+    ViewData["Title"] = "Your Current Package";
+}
+
+<div class="container py-5">
+    <h1 class="h4 mb-4">Your Current Package</h1>
+
+    @if (!string.IsNullOrEmpty(Model.Message))
+    {
+        <span class="text-danger mb-3 d-block">@Model.Message</span>
+    }
+
+    @if (Model.HasPackage && Model.Items.Any())
+    {
+        <div class="row g-4">
+            <div class="col-lg-8">
+                @foreach (var item in Model.Items)
+                {
+                    <div class="card p-3 mb-3">
+                        <div class="fw-semibold">@item.ServiceType</div>
+                        <div class="text-muted small">@item.DisplayName</div>
+                        <div class="text-secondary small mb-1">@item.Details</div>
+                        <div class="text-secondary small">
+                            @item.ComputedDates
+                            <span class="text-muted">@item.ComputedQtyLabel</span>
+                        </div>
+                        <div class="fw-bold">$@item.ComputedTotal.ToString("F2")</div>
+
+                        <form asp-action="RemoveItem" method="post" class="mt-2">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="refId" value="@item.RefId" />
+                            <input type="hidden" name="serviceType" value="@item.ServiceType" />
+                            <button type="submit" class="btn btn-sm btn-outline-danger">Remove</button>
+                        </form>
+                    </div>
+                }
+            </div>
+
+            <div class="col-lg-4">
+                <div class="card p-4 sticky-top" style="top: 88px;">
+                    <div class="d-flex justify-content-between">
+                        <span class="fw-semibold">Package Total</span>
+                        <span class="fw-bold">$@Model.Total.ToString("F2")</span>
+                    </div>
+                    <div class="small text-secondary mb-3">
+                        Taxes &amp; fees calculated at checkout.
+                    </div>
+
+                    <!-- Adjust controller/action if your Checkout controller is named differently -->
+                    <a class="btn btn-primary w-100"
+                       asp-controller="Checkout"
+                       asp-action="Index">
+                        Book Now
+                    </a>
+
+                    <div class="text-center mt-4">
+                        <img src="~/Images/Tiny.png"
+                             alt="TripRex Mascot"
+                             class="img-fluid mb-2"
+                             style="max-width: 220px; height: auto; filter: drop-shadow(0 4px 10px rgba(0,0,0,0.2));" />
+                        <p class="fw-semibold text-success" style="font-size: 1.05rem;">
+                            Get ready for a dinomite trip! — Tiny the T-Rex
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
