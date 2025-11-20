@@ -1,0 +1,743 @@
+﻿using CoreTripRex.Models.Dashboard;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration.UserSecrets;
+using System;
+using System.Data;
+using System.Data.SqlClient;
+using System.Runtime.Serialization.Formatters.Binary;
+using System.Text.Json;
+using TripRexLibraries;
+using Utilities;
+
+namespace CoreTripRex.Controllers.DashboardControllers
+{
+    public class DashboardController : Controller
+    {
+        private readonly StoredProcs sp = new StoredProcs();
+        private static readonly Random rand = new Random();
+
+        // GET : DASHBOARD
+        [HttpGet]
+        public IActionResult Index()
+        {
+            var model = new DashboardViewModel
+            {
+                IncludeFlights = true,
+                IncludeHotels = true,
+                IncludeCars = true,
+                IncludeEvents = true
+            };
+
+            int? userId = GetUserIdFromSession();
+            if (userId.HasValue)
+            {
+                model.ShowResumeButton = true;
+                model.StatusMessage = "Welcome back! You can resume your previous session.";
+
+                TrySaveSearch(userId.Value, model);
+                model.Cart = LoadCartVm(userId.Value, model);
+            }
+            else
+            {
+                model.ShowResumeButton = false;
+                model.StatusMessage = "Browsing as guest. Sign in to build your trip and save your progress.";
+                model.ShowCart = false;
+            }
+            if (TempData.ContainsKey("DashboardStatus")) model.StatusMessage = TempData["DashboardStatus"] as string ?? model.StatusMessage;
+            if (TempData.ContainsKey("DashboardError")) model.ErrorMessage = TempData["DashboardError"] as string ?? model.ErrorMessage;
+            return View(model);
+        }
+
+        // POST : DASHBOARD/SEARCH
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Search(DashboardViewModel model)
+        {
+            model.ErrorMessage = null;
+            model.StatusMessage ??= string.Empty;
+
+            try
+            {
+                // validation 
+                if (!model.StartDate.HasValue || !model.EndDate.HasValue) throw new Exception("Enter valid start and end date.");
+                if (string.IsNullOrWhiteSpace(model.Origin) || string.IsNullOrWhiteSpace(model.Destination)) throw new Exception("Fill in both location fields.");
+                DateTime startDate = model.StartDate.Value;
+                DateTime endDate = model.EndDate.Value;
+
+                // persisting trip dates
+                HttpContext.Session.SetString("TripStart", startDate.ToString("o"));
+                HttpContext.Session.SetString("TripEnd", startDate.ToString("o"));
+
+                // resolve city + airport codes
+                int originCityId = ResolveCity(model.Origin);
+                int destCityId = ResolveCity(model.Destination);
+                string fromCode = GetAirportCodeFromCity(originCityId);
+                string toCode = GetAirportCodeFromCity(destCityId);
+
+                int? userId = GetUserIdFromSession();
+
+                // load saved search
+                if (userId.HasValue) TryLoadSavedSearch(userId.Value, model);
+
+                // flights
+                if (model.IncludeFlights)
+                {
+                    try
+                    {
+                        model.FlightVendors = await LoadFlightsVm(fromCode, toCode, startDate);
+                        model.ShowFlights = model.FlightVendors.Count > 0;
+                    }
+                    catch (Exception ex)
+                    {
+                        model.ErrorMessage = "Flight API error: " + ex.Message;
+                        model.ShowFlights = false;
+                    }
+                }
+                else model.ShowFlights = false;
+
+                // hotels
+                if (model.IncludeCars)
+                {
+                    try
+                    {
+                        var dsHotels = sp.HotelSearchbyCity(destCityId);
+                        model.HotelVendors = LoadHotelsVm(dsHotels);
+                        model.ShowHotels = model.HotelVendors.Count > 0;
+                    }
+                    catch (Exception ex)
+                    {
+                        model.ErrorMessage = "Hotel error: " + ex.Message;
+                        model.ShowHotels = false;
+                    }
+                }
+                else model.ShowHotels = false;
+
+                // cars
+                if (model.IncludeCars)
+                {
+                    try
+                    {
+                        var dsCars = sp.CarsSearch(destCityId);
+                        model.CarVendors = LoadCarsVm(dsCars);
+                        model.ShowCars = model.CarVendors.Count > 0;
+                    }
+                    catch (Exception ex)
+                    {
+                        model.ErrorMessage = "Car error: " + ex.Message;
+                        model.ShowCars = false;
+                    }
+                }
+                else model.ShowCars = false;
+
+                // events
+                if (model.IncludeCars)
+                {
+                    try
+                    {
+                        var dsEvents = sp.EventSearch(destCityId, startDate, endDate);
+                        model.EventVendors = LoadEventsVm(dsEvents);
+                        model.ShowEvents = model.EventVendors.Count > 0;
+                    }
+                    catch (Exception ex)
+                    {
+                        model.ErrorMessage = "Event error: " + ex.Message;
+                        model.ShowEvents = false;
+                    }
+                }
+                else model.ShowEvents = false;
+
+                // show acrt 
+                if (userId.HasValue)
+                {
+                    model.Cart = LoadCartVm(userId.Value, model);
+                    model.ShowCart = model.Cart != null && model.Cart.Items.Count > 0;
+                }
+                else model.ShowCart = false;
+                return View("Index", model);
+            }
+            catch (Exception ex)
+            {
+                model.ErrorMessage = "Error: " + ex.Message;
+                return View("Index", model);
+            }
+
+        }
+        // POST: /Dashboard/AddFlight
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public IActionResult AddFlight(int flightId) { return AddToPackage("Flight", flightId); }
+
+        // POST: /Dashboard/AddRoom
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public IActionResult AddRoom(int roomId) { return AddToPackage("Hotel", roomId); }
+
+        // POST: /Dashboard/AddEvent
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public IActionResult AddEvent(int eventId) { return AddToPackage("Event", eventId); }
+
+        // PRIVATE HELPERS
+        private IActionResult AddToPackage(string type, int refId)
+        {
+            try
+            {
+                int? userId = GetUserIdFromSession();
+                if (!userId.HasValue)
+                {
+                    TempData["DashboardError"] = "Please sign in to add items to your cart.";
+                    return RedirectToAction("Index");
+                }
+                int packageId;
+                string packageIdStr = HttpContext.Session.GetString("PackageID");
+                if (!string.IsNullOrEmpty(packageIdStr) && int.TryParse(packageIdStr, out int pid))
+                {
+                    packageId = pid;
+                }
+                else
+                {
+                    packageId = sp.PackageGetOrCreate(userId.Value);
+                    HttpContext.Session.SetString("PackageID", packageId.ToString());
+                }
+                DateTime? startUtc = null;
+                DateTime? endUtc = null;
+                int qty = 1;
+                if (type == "Hotel" || type == "Car Rental")
+                {
+                    var tripStartStr = HttpContext.Session.GetString("TripStart");
+                    var tripEndStr = HttpContext.Session.GetString("TripEnd");
+                    if (DateTime.TryParse(tripStartStr, out var ts)) startUtc = ts;
+                    if (DateTime.TryParse(tripEndStr, out var te)) endUtc = te;
+                }
+                int result = sp.PackageAddUpdateItem(packageId, type, refId, qty, startUtc, endUtc);
+                if (result >= 0 || result == -1)
+                {
+                    TempData["DashboardStatus"] = $"{type} added successfully.";
+                    TempData["DashboardError"] = null;
+                }
+                else TempData["DashboardError"] = $"Failed to add {type}.";
+            }
+            catch (Exception ex) { TempData["DashboardError"] = "Error: " + ex.Message; }
+            return RedirectToAction("Index");
+        }
+        private int? GetUserIdFromSession()
+        {
+            var val = HttpContext.Session.GetString("UserID");
+            if (!string.IsNullOrEmpty(val) && int.TryParse(val, out int id)) return id;
+            return null;
+        }
+
+        private void TryLoadSavedSearch(int userId, DashboardViewModel model)
+        {
+            try
+            {
+                SqlCommand cmd = new SqlCommand
+                {
+                    CommandType = CommandType.StoredProcedure,
+                    CommandText = "usp_Get_Saved_Search"
+                };
+                cmd.Parameters.AddWithValue("@UserID", userId);
+
+                DBConnect objDB = new DBConnect();
+                DataSet ds = objDB.GetDataSetUsingCmdObj(cmd);
+
+                if (ds.Tables.Count > 0 && ds.Tables[0].Rows.Count > 0)
+                {
+                    var row = ds.Tables[0].Rows[0];
+                    if (row["last_search"] != DBNull.Value)
+                    {
+                        byte[] byteArray = (byte[])row["last_search"];
+#pragma warning disable SYSLIB0011 // Type or member is obsolete
+                        BinaryFormatter deSerializer = new BinaryFormatter();
+#pragma warning restore SYSLIB0011 // Type or member is obsolete
+                        using MemoryStream memStream = new MemoryStream(byteArray);
+#pragma warning disable SYSLIB0011
+                        SavedSearch saved = (SavedSearch)deSerializer.Deserialize(memStream);
+#pragma warning restore SYSLIB0011
+
+                        model.Origin = saved.Origin;
+                        model.Destination = saved.Destination;
+                        model.StartDate = saved.DepartDate;
+                        model.EndDate = saved.ReturnDate;
+
+                        HttpContext.Session.SetString("TripStart", saved.DepartDate.ToString("o"));
+                        HttpContext.Session.SetString("TripEnd", saved.ReturnDate.ToString("o"));
+
+                        model.StatusMessage += "<br/>Your previous search has been restored!";
+                    }
+                    else
+                    {
+                        model.StatusMessage += "<br/>A saved search was never stored for this account.";
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                model.StatusMessage += "<br/>Unable to load saved search: " + ex.Message;
+            }
+        }
+        private void TrySaveSearch(int userId, DashboardViewModel model)
+        {
+            try
+            {
+                SavedSearch objSearch = new SavedSearch
+                {
+                    Origin = model.Origin,
+                    Destination = model.Destination,
+                    DepartDate = model.StartDate ?? DateTime.MinValue,
+                    ReturnDate = model.EndDate ?? DateTime.MinValue
+                };
+
+#pragma warning disable SYSLIB0011
+                BinaryFormatter serializer = new BinaryFormatter();
+#pragma warning restore SYSLIB0011
+                using MemoryStream memStream = new MemoryStream();
+                serializer.Serialize(memStream, objSearch);
+                byte[] byteArray = memStream.ToArray();
+
+                SqlCommand cmd = new SqlCommand
+                {
+                    CommandType = CommandType.StoredProcedure,
+                    CommandText = "usp_Store_Saved_Search"
+                };
+                cmd.Parameters.AddWithValue("@UserID", userId);
+                cmd.Parameters.AddWithValue("@SavedSearch", byteArray);
+
+                DBConnect objDB = new DBConnect();
+                int retVal = objDB.DoUpdateUsingCmdObj(cmd);
+
+                model.StatusMessage = retVal > 0
+                    ? "Search criteria saved successfully."
+                    : "A problem occurred saving the search.";
+            }
+            catch (Exception ex)
+            {
+                model.ErrorMessage = "Serialization error: " + ex.Message;
+            }
+        }
+        private int ResolveCity(string name)
+        {
+            DataSet ds = sp.CitiesList();
+            foreach (DataRow row in ds.Tables[0].Rows)
+            {
+                if (row["name"].ToString().Equals(name, StringComparison.OrdinalIgnoreCase))
+                    return Convert.ToInt32(row["id"]);
+            }
+            throw new Exception("City not found: " + name);
+        }
+        private string GetAirportCodeFromCity(int cityId)
+        {
+            DataSet ds = sp.AirportList(cityId);
+
+            if (ds.Tables.Count == 0 || ds.Tables[0].Rows.Count == 0)
+                throw new Exception("No airport found for selected city.");
+
+#pragma warning disable CS8603 // Possible null reference return.
+            return ds.Tables[0].Rows[0]["code"].ToString();
+#pragma warning restore CS8603 // Possible null reference return.
+        }
+
+        private string ResolvePlaceholder(string kind)
+        {
+            switch ((kind ?? string.Empty).ToLowerInvariant())
+            {
+                case "airline":
+                    return "~/images/placeholders/airline.png";
+                case "car":
+                    return "~/images/placeholders/car.png";
+                case "event":
+                    return "~/images/placeholders/event.png";
+                default:
+                    return "~/images/no-image.png";
+            }
+        }
+        private async Task<List<FlightVendorVM>> LoadFlightsVm(string fromCode, string toCode, DateTime departDate)
+        {
+            // This mirrors your original btnSearch_Click code
+            const string apiUrl = "https://cis-iis2.temple.edu/Fall2025/CIS3342_tuo90411/WebAPI/api/Flights/FindFlights";
+            var body = new
+            {
+                FromCode = fromCode,
+                ToCode = toCode,
+                DepartDate = departDate.ToString("yyyy-MM-ddTHH:mm:ss"),
+                ClassCode = (string)null,
+                MinPrice = (decimal?)null,
+                MaxPrice = (decimal?)null
+            };
+
+            using var client = new HttpClient();
+            string jsonOutbound = JsonSerializer.Serialize(body);
+            var content = new StringContent(jsonOutbound, System.Text.Encoding.UTF8, "application/json");
+            var response = await client.PostAsync(apiUrl, content);
+
+            string rawResponse = await response.Content.ReadAsStringAsync();
+
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new Exception(
+                    "FLIGHT API CALL FAILED\n\n" +
+                    $"URL: {apiUrl}\n\n" +
+                    $"Status Code: {response.StatusCode}\n\n" +
+                    $"Request JSON:\n{jsonOutbound}\n\n" +
+                    $"Raw Response:\n{rawResponse}"
+                );
+            }
+
+
+            string json = await response.Content.ReadAsStringAsync();
+            var flights = JsonSerializer.Deserialize<List<FlightResponse>>(json, new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
+
+            if (flights == null || flights.Count == 0)
+                throw new Exception("No flights returned from API.");
+
+            // Group by vendor (AirCarrierName)
+            var vendors = new List<FlightVendorVM>();
+
+            foreach (var group in flights.GroupBy(f => f.AirCarrierName))
+            {
+                var first = group.First();
+
+                var vendorVm = new FlightVendorVM
+                {
+                    Vendor = group.Key,
+                    ImageUrl = string.IsNullOrWhiteSpace(first.ImageUrl)
+                        ? ResolvePlaceholder("airline")
+                        : first.ImageUrl,
+                    Caption = string.IsNullOrWhiteSpace(first.Caption)
+                        ? "Multiple routes and fare classes available"
+                        : first.Caption
+                };
+
+                foreach (var f in group)
+                {
+                    vendorVm.Options.Add(new FlightOptionVM
+                    {
+                        FlightID = f.FlightID,
+                        FlightNumber = f.FlightNumber,
+                        DepartCode = f.DepartCode,
+                        ArriveCode = f.ArriveCode,
+                        DepartTime = Convert.ToDateTime(f.DepartureTime),
+                        ArriveTime = Convert.ToDateTime(f.ArrivalTime),
+                        ClassCode = f.ClassCode,
+                        Price = f.Price
+                    });
+                }
+
+                vendors.Add(vendorVm);
+            }
+
+            return vendors;
+        }
+
+        // ---------- Hotels ----------
+
+        private List<HotelVendorVM> LoadHotelsVm(DataSet ds)
+        {
+            var result = new List<HotelVendorVM>();
+
+            if (ds == null || ds.Tables.Count == 0 || ds.Tables[0].Rows.Count == 0)
+                return result;
+
+            DataTable dtHotels = ds.Tables[0];
+
+            foreach (DataRow h in dtHotels.Rows)
+            {
+                var vendor = new HotelVendorVM
+                {
+                    VendorID = h.Table.Columns.Contains("vendor_id") ? Convert.ToInt32(h["vendor_id"]) : 0,
+                    HotelName = h.Table.Columns.Contains("hotel_name") ? h["hotel_name"].ToString() : string.Empty,
+                    Phone = h.Table.Columns.Contains("phone") ? h["phone"].ToString() : string.Empty,
+                    Email = h.Table.Columns.Contains("email") ? h["email"].ToString() : string.Empty,
+                    Caption = h.Table.Columns.Contains("caption") && h["caption"] != DBNull.Value
+                        ? h["caption"].ToString()
+                        : "Comfort and style near your destination",
+                    StartingPrice = h.Table.Columns.Contains("starting_price") && h["starting_price"] != DBNull.Value
+                        ? Convert.ToDecimal(h["starting_price"])
+                        : 0m,
+                    ImageUrl = GetPrimaryVendorImageSafe(h)
+                };
+
+                // Load rooms for this vendor (mirrors rptHotelVendors_ItemDataBound)
+                if (vendor.VendorID != 0)
+                {
+                    DataSet dsRooms = sp.HotelRooms(vendor.VendorID);
+                    if (dsRooms != null && dsRooms.Tables.Count > 0 && dsRooms.Tables[0].Rows.Count > 0)
+                    {
+                        foreach (DataRow r in dsRooms.Tables[0].Rows)
+                        {
+                            var room = new RoomOptionVM
+                            {
+                                ID = r.Table.Columns.Contains("id") ? Convert.ToInt32(r["id"]) : 0,
+                                RoomType = r.Table.Columns.Contains("room_type")
+                                    ? r["room_type"].ToString()
+                                    : "Room",
+                                MaxOccupancy = r.Table.Columns.Contains("max_occupancy") && r["max_occupancy"] != DBNull.Value
+                                    ? Convert.ToString(r["max_occupancy"])
+                                    : Convert.ToString(2),
+                                PricePerNight = r.Table.Columns.Contains("base_price") && r["base_price"] != DBNull.Value
+                                    ? Convert.ToDecimal(r["base_price"])
+                                    : 0m,
+                                ImageUrl = r.Table.Columns.Contains("image_url") && r["image_url"] != DBNull.Value
+                                    ? r["image_url"].ToString()
+                                    : ResolvePlaceholder("airline")
+                            };
+
+                            vendor.Rooms.Add(room);
+                        }
+                    }
+                }
+
+                result.Add(vendor);
+            }
+
+            return result;
+        }
+
+        private string GetPrimaryVendorImageSafe(DataRow hotelRow)
+        {
+            try
+            {
+                if (!hotelRow.Table.Columns.Contains("vendor_id"))
+                    return ResolvePlaceholder("airline");
+
+                int vendorId = Convert.ToInt32(hotelRow["vendor_id"]);
+                var ds = sp.GetVendorDetails(vendorId);
+
+                if (ds != null && ds.Tables.Count > 1 && ds.Tables[1].Rows.Count > 0)
+                {
+                    var imgs = ds.Tables[1];
+
+                    foreach (DataRow r in imgs.Rows)
+                    {
+                        if (imgs.Columns.Contains("first_pic") &&
+                            r["first_pic"] != DBNull.Value &&
+                            Convert.ToBoolean(r["first_pic"]))
+                        {
+                            return Convert.ToString(r["image_url"]);
+                        }
+                    }
+
+                    return Convert.ToString(imgs.Rows[0]["image_url"]);
+                }
+            }
+            catch
+            {
+                // ignore and fall through
+            }
+
+            return ResolvePlaceholder("airline");
+        }
+
+        // ---------- Cars ----------
+
+        private List<CarVendorVM> LoadCarsVm(DataSet ds)
+        {
+            var result = new List<CarVendorVM>();
+
+            if (ds == null || ds.Tables.Count == 0 || ds.Tables[0].Rows.Count == 0)
+                return result;
+
+            DataTable dtCars = ds.Tables[0];
+
+            // Build unique vendors based on "agency"
+            var vendorsByAgency = new Dictionary<string, CarVendorVM>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (DataRow row in dtCars.Rows)
+            {
+                string agency = row.Table.Columns.Contains("agency")
+                    ? row["agency"].ToString()
+                    : "Car Rental";
+
+                if (!vendorsByAgency.TryGetValue(agency, out var vendor))
+                {
+                    vendor = new CarVendorVM
+                    {
+                        Agency = agency,
+                        VendorID = row.Table.Columns.Contains("vendor_id")
+                            ? Convert.ToInt32(row["vendor_id"])
+                            : 0,
+                        StartingPrice = row.Table.Columns.Contains("daily_rate") && row["daily_rate"] != DBNull.Value
+                            ? Convert.ToDecimal(row["daily_rate"])
+                            : 0m,
+                        Caption = dtCars.Columns.Contains("caption") && row["caption"] != DBNull.Value
+                            ? row["caption"].ToString()
+                            : dtCars.Columns.Contains("description") && row["description"] != DBNull.Value
+                                ? row["description"].ToString()
+                                : "Economy to SUV options available – reliable local service.",
+                        ImageUrl = ResolvePlaceholder("car")
+                    };
+
+                    vendorsByAgency[agency] = vendor;
+                    result.Add(vendor);
+                }
+
+                // Build car options
+                var car = new CarOptionVM
+                {
+                    ID = row.Table.Columns.Contains("id") ? Convert.ToInt32(row["id"]) : 0,
+                    Make = row.Table.Columns.Contains("make") ? row["make"].ToString() : string.Empty,
+                    Model = row.Table.Columns.Contains("model") ? row["model"].ToString() : string.Empty,
+                    CarClass = row.Table.Columns.Contains("car_class") ? row["car_class"].ToString() : string.Empty,
+                    Seats = row.Table.Columns.Contains("seats") && row["seats"] != DBNull.Value
+                        ? Convert.ToInt32(row["seats"])
+                        : 0,
+                    DailyRate = row.Table.Columns.Contains("daily_rate") && row["daily_rate"] != DBNull.Value
+                        ? Convert.ToDecimal(row["daily_rate"])
+                        : 0m,
+                    ImageUrl = row.Table.Columns.Contains("image_url") && row["image_url"] != DBNull.Value
+                        ? row["image_url"].ToString()
+                        : ResolvePlaceholder("car")
+                };
+
+                vendor.Cars.Add(car);
+            }
+
+            return result;
+        }
+
+        // ---------- Events ----------
+
+        private List<EventVendorVM> LoadEventsVm(DataSet ds)
+        {
+            var result = new List<EventVendorVM>();
+
+            if (ds == null || ds.Tables.Count == 0 || ds.Tables[0].Rows.Count == 0)
+                return result;
+
+            DataTable dtEvents = ds.Tables[0];
+            var groups = new Dictionary<(string Organizer, string Venue), EventVendorVM>();
+
+            foreach (DataRow row in dtEvents.Rows)
+            {
+                string organizer = dtEvents.Columns.Contains("organizer") && row["organizer"] != DBNull.Value
+                    ? row["organizer"].ToString()
+                    : "Local Events";
+
+                string venue = dtEvents.Columns.Contains("venue") && row["venue"] != DBNull.Value
+                    ? row["venue"].ToString()
+                    : "Various";
+
+                string imageUrl = dtEvents.Columns.Contains("image_url") && row["image_url"] != DBNull.Value
+                    ? row["image_url"].ToString()
+                    : ResolvePlaceholder("event");
+
+                var key = (organizer, venue);
+
+                if (!groups.TryGetValue(key, out var vendor))
+                {
+                    vendor = new EventVendorVM
+                    {
+                        Organizer = organizer,
+                        Venue = venue,
+                        ImageUrl = imageUrl,
+                        Caption = dtEvents.Columns.Contains("caption") && row["caption"] != DBNull.Value
+                            ? row["caption"].ToString()
+                            : dtEvents.Columns.Contains("description") && row["description"] != DBNull.Value
+                                ? row["description"].ToString()
+                                : "Exciting events happening during your stay."
+                    };
+
+                    groups[key] = vendor;
+                    result.Add(vendor);
+                }
+
+                // Child event option
+                var ev = new EventOptionVM
+                {
+                    ID = dtEvents.Columns.Contains("id") && row["id"] != DBNull.Value
+                        ? Convert.ToInt32(row["id"])
+                        : 0,
+                    Name = dtEvents.Columns.Contains("name") ? row["name"].ToString() : string.Empty,
+                    StartTime = dtEvents.Columns.Contains("start_time") && row["start_time"] != DBNull.Value
+                        ? Convert.ToDateTime(row["start_time"])
+                        : DateTime.MinValue,
+                    Price = dtEvents.Columns.Contains("price") && row["price"] != DBNull.Value
+                        ? Convert.ToDecimal(row["price"])
+                        : 0m
+                };
+
+                vendor.Events.Add(ev);
+            }
+
+            return result;
+        }
+
+        // ---------- Cart ----------
+
+        private CartVM LoadCartVm(int userId, DashboardViewModel model)
+        {
+            var cart = new CartVM();
+
+            int packageId = sp.PackageGetOrCreate(userId);
+            DataSet ds = sp.PackageGet(packageId);
+
+            if (ds == null || ds.Tables.Count <= 1 || ds.Tables[1].Rows.Count == 0)
+            {
+                model.ShowCart = false;
+                return cart;
+            }
+
+            DataTable items = ds.Tables[1];
+            decimal total = 0m;
+
+            // Determine trip duration from session
+            DateTime tripStart;
+            DateTime tripEnd;
+
+            var tripStartStr = HttpContext.Session.GetString("TripStart");
+            var tripEndStr = HttpContext.Session.GetString("TripEnd");
+
+            if (!DateTime.TryParse(tripStartStr, out tripStart))
+                tripStart = DateTime.UtcNow;
+
+            if (!DateTime.TryParse(tripEndStr, out tripEnd))
+                tripEnd = tripStart.AddDays(1);
+
+            int totalDays = (tripEnd - tripStart).Days;
+            if (totalDays < 1) totalDays = 1;
+
+            foreach (DataRow r in items.Rows)
+            {
+                string type = r["service_type"].ToString();
+
+                decimal unitPrice = r["unit_price"] != DBNull.Value
+                    ? Convert.ToDecimal(r["unit_price"])
+                    : 0m;
+
+                decimal lineTotal;
+
+                if (type == "Hotel" || type == "Car Rental")
+                {
+                    lineTotal = unitPrice * totalDays;
+                }
+                else
+                {
+                    lineTotal = r["line_total"] != DBNull.Value
+                        ? Convert.ToDecimal(r["line_total"])
+                        : unitPrice;
+                }
+
+                total += lineTotal;
+
+                cart.Items.Add(new CartItemVM
+                {
+                    ServiceType = type,
+                    DisplayName = r.Table.Columns.Contains("display_name") ? r["display_name"].ToString() : string.Empty,
+                    Details = r.Table.Columns.Contains("details") ? r["details"].ToString() : string.Empty,
+                    RefId = r.Table.Columns.Contains("ref_id") ? r["ref_id"].ToString() : string.Empty,
+                    ItemPrice = unitPrice,
+                    Quantity = (type == "Hotel" || type == "Car Rental") ? totalDays : (r.Table.Columns.Contains("qty") && r["qty"] != DBNull.Value ? Convert.ToInt32(r["qty"]) : 1),
+                    ComputedPrice = lineTotal
+                });
+            }
+
+            cart.Total = total;
+            model.ShowCart = cart.Items.Count > 0;
+
+            return cart;
+        }
+    }
+}
