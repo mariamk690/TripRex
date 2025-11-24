@@ -1,4 +1,4 @@
-﻿namespace CoreTripRex.Models.AccountInfoModels
+﻿namespace CoreTripRex.Models.AccountInfo
 {
     public class PaymentMethod
     {
