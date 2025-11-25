@@ -41,6 +41,12 @@
 						Don’t have an account?
 						<a asp-action="Register">Sign up here</a>
 					</p>
+					<p class="small mt-2">
+						<a asp-action="ForgotUsername">Forgot your username?</a>
+					</p>
+					<p class="small mt-2">
+						<a asp-action="ForgotPassword">Forgot your password?</a>
+					</p>
 				</div>
 			</div>
 		}
@@ -84,6 +90,33 @@
 								<input asp-for="RepeatPassword" class="form-control" type="password" />
 								<span asp-validation-for="RepeatPassword" class="text-danger small"></span>
 							</div>
+							<div class="col-12">
+								<label class="form-label">Security Question 1</label>
+								<input asp-for="SecurityQuestion1" class="form-control" />
+							</div>
+							<div class="col-12">
+								<label class="form-label">Answer</label>
+								<input asp-for="SecurityAnswer1" class="form-control" />
+							</div>
+
+							<div class="col-12">
+								<label class="form-label">Security Question 2</label>
+								<input asp-for="SecurityQuestion2" class="form-control" />
+							</div>
+							<div class="col-12">
+								<label class="form-label">Answer</label>
+								<input asp-for="SecurityAnswer2" class="form-control" />
+							</div>
+
+							<div class="col-12">
+								<label class="form-label">Security Question 3</label>
+								<input asp-for="SecurityQuestion3" class="form-control" />
+							</div>
+							<div class="col-12">
+								<label class="form-label">Answer</label>
+								<input asp-for="SecurityAnswer3" class="form-control" />
+							</div>
+
 
 							@if (!string.IsNullOrEmpty(Model.RegisterError))
 							{

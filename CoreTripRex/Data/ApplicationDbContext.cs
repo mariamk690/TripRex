@@ -10,5 +10,6 @@ namespace CoreTripRex.Data
             : base(options)
         {
         }
+        public DbSet<UserSecurityQuestions> UserSecurityQuestions { get; set; } 
     }
 }
