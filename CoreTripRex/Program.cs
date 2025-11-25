@@ -1,4 +1,5 @@
 using CoreTripRex.Data;
+using CoreTripRex.Models;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.SqlServer;
@@ -13,14 +14,15 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 );
 
 // ------------------- IDENTITY -------------------
-builder.Services.AddIdentity<IdentityUser, IdentityRole>(options =>
+builder.Services.AddIdentity<AppUser, IdentityRole>(options =>
 {
-    // TWEAK REQUIREMENTS
     options.Password.RequireDigit = false;
-    options.Password.RequireUppercase = false;
     options.Password.RequireLowercase = false;
     options.Password.RequireNonAlphanumeric = false;
-    options.Password.RequiredLength = 6;
+    options.Password.RequireUppercase = false;
+    options.Password.RequiredLength = 1; 
+    options.Password.RequiredUniqueChars = 0;
+    options.SignIn.RequireConfirmedAccount = true;
 })
 .AddEntityFrameworkStores<ApplicationDbContext>()
 .AddDefaultTokenProviders();

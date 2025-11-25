@@ -1,4 +1,5 @@
 ﻿using CoreTripRex.Models.RegisterSignInVM;
+using CoreTripRex.Models;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 
@@ -6,11 +7,11 @@ namespace CoreTripRex.Controllers
 {
     public class AccountController : Controller
     {
-        private readonly UserManager<IdentityUser> _userManager;
-        private readonly SignInManager<IdentityUser> _signInManager;
+        private readonly UserManager<AppUser> _userManager;
+        private readonly SignInManager<AppUser> _signInManager;
 
-        public AccountController(UserManager<IdentityUser> userManager,
-                                 SignInManager<IdentityUser> signInManager)
+        public AccountController(UserManager<AppUser> userManager,
+                                 SignInManager<AppUser> signInManager)
         {
             _userManager = userManager;
             _signInManager = signInManager;
@@ -20,7 +21,11 @@ namespace CoreTripRex.Controllers
         [HttpGet]
         public IActionResult Login()
         {
-            return View("RegisterSignIn", new RegisterSignInVM());
+            var vm = new RegisterSignInVM
+            {
+                LoginEmail = Request.Cookies["SavedLoginEmail"] ?? string.Empty
+            };
+            return View("RegisterSignIn", vm);
         }
 
         // LOGIN POST
@@ -33,11 +38,27 @@ namespace CoreTripRex.Controllers
                 return View("RegisterSignIn", model);
             }
 
+            // ----- REMEMBER EMAIL COOKIE LOGIC -----
+            if (Request.Form["RememberEmail"] == "on")
+            {
+                // Save email for 30 days
+                Response.Cookies.Append("SavedLoginEmail", model.LoginEmail, new CookieOptions
+                {
+                    Expires = DateTimeOffset.UtcNow.AddDays(30)
+                });
+            }
+            else
+            {
+                // Delete cookie if user unchecks
+                Response.Cookies.Delete("SavedLoginEmail");
+            }
+            // ----------------------------------------
+
             var result = await _signInManager.PasswordSignInAsync(
                 model.LoginEmail,
                 model.LoginPassword,
-                false,
-                false
+                false,  // don't use persistent login
+                false   // don't lockout on failure
             );
 
             if (result.Succeeded)
@@ -46,6 +67,7 @@ namespace CoreTripRex.Controllers
             model.LoginError = "Invalid email or password.";
             return View("RegisterSignIn", model);
         }
+
 
         // REGISTER GET
         [HttpGet]
@@ -72,11 +94,12 @@ namespace CoreTripRex.Controllers
                 return View("RegisterSignIn", model);
             }
 
-            var user = new IdentityUser
+            var user = new AppUser
             {
                 UserName = model.Email,
                 Email = model.Email,
-                PhoneNumber = model.Phone
+                PhoneNumber = model.Phone,
+                FullName = model.FullName
             };
 
             var result = await _userManager.CreateAsync(user, model.Password);
