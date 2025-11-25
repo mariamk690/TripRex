@@ -38,10 +38,9 @@ namespace CoreTripRex.Controllers
                 return View("RegisterSignIn", model);
             }
 
-            // ----- REMEMBER EMAIL COOKIE LOGIC -----
+            // ----- REMEMBER EMAIL COOKIE -----
             if (Request.Form["RememberEmail"] == "on")
             {
-                // Save email for 30 days
                 Response.Cookies.Append("SavedLoginEmail", model.LoginEmail, new CookieOptions
                 {
                     Expires = DateTimeOffset.UtcNow.AddDays(30)
@@ -49,23 +48,30 @@ namespace CoreTripRex.Controllers
             }
             else
             {
-                // Delete cookie if user unchecks
                 Response.Cookies.Delete("SavedLoginEmail");
             }
-            // ----------------------------------------
+            // ----------------------------------
 
-            var result = await _signInManager.PasswordSignInAsync(
-                model.LoginEmail,
-                model.LoginPassword,
-                false,  // don't use persistent login
-                false   // don't lockout on failure
-            );
+            // Find user BY EMAIL
+            var user = await _userManager.FindByEmailAsync(model.LoginEmail);
+            if (user == null)
+            {
+                model.LoginError = "Invalid email or password.";
+                return View("RegisterSignIn", model);
+            }
 
-            if (result.Succeeded)
-                return RedirectToAction("Index", "Dashboard");
+            // Verify password
+            var pwCheck = await _signInManager.CheckPasswordSignInAsync(user, model.LoginPassword, false);
+            if (!pwCheck.Succeeded)
+            {
+                model.LoginError = "Invalid email or password.";
+                return View("RegisterSignIn", model);
+            }
 
-            model.LoginError = "Invalid email or password.";
-            return View("RegisterSignIn", model);
+            // Actually sign in user
+            await _signInManager.SignInAsync(user, false);
+
+            return RedirectToAction("Index", "Dashboard");
         }
 
 
@@ -74,6 +80,13 @@ namespace CoreTripRex.Controllers
         public IActionResult Register()
         {
             return View("RegisterSignIn", new RegisterSignInVM { ShowRegister = true });
+        }
+        [HttpPost]
+        public async Task<IActionResult> Logout()
+        {
+            await _signInManager.SignOutAsync();
+            Response.Cookies.Delete("SavedLoginEmail");
+            return RedirectToAction("Index", "Dashboard");
         }
 
         // REGISTER POST
