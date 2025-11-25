@@ -330,35 +330,77 @@ namespace CoreTripRex.Controllers
             if (result.Succeeded)
             {
                 var questions = new List<UserSecurityQuestions>
-                {
-                    new UserSecurityQuestions
-                    {
-                        UserId = user.Id,
-                        Question = model.SecurityQuestion1 ?? string.Empty,
-                        AnswerHash = _userManager.PasswordHasher.HashPassword(user, model.SecurityAnswer1 ?? string.Empty)
-                    },
-                    new UserSecurityQuestions
-                    {
-                        UserId = user.Id,
-                        Question = model.SecurityQuestion2 ?? string.Empty,
-                        AnswerHash = _userManager.PasswordHasher.HashPassword(user, model.SecurityAnswer2 ?? string.Empty)
-                    },
-                    new UserSecurityQuestions
-                    {
-                        UserId = user.Id,
-                        Question = model.SecurityQuestion3 ?? string.Empty,
-                        AnswerHash = _userManager.PasswordHasher.HashPassword(user, model.SecurityAnswer3 ?? string.Empty)
-                    }
-                };
+        {
+            new UserSecurityQuestions
+            {
+                UserId = user.Id,
+                Question = model.SecurityQuestion1 ?? string.Empty,
+                AnswerHash = _userManager.PasswordHasher.HashPassword(user, model.SecurityAnswer1 ?? string.Empty)
+            },
+            new UserSecurityQuestions
+            {
+                UserId = user.Id,
+                Question = model.SecurityQuestion2 ?? string.Empty,
+                AnswerHash = _userManager.PasswordHasher.HashPassword(user, model.SecurityAnswer2 ?? string.Empty)
+            },
+            new UserSecurityQuestions
+            {
+                UserId = user.Id,
+                Question = model.SecurityQuestion3 ?? string.Empty,
+                AnswerHash = _userManager.PasswordHasher.HashPassword(user, model.SecurityAnswer3 ?? string.Empty)
+            }
+        };
+
                 _context.UserSecurityQuestions.AddRange(questions);
                 await _context.SaveChangesAsync();
 
-                await _signInManager.SignInAsync(user, false);
-                return RedirectToAction("Index", "Dashboard");
+                var token = await _userManager.GenerateEmailConfirmationTokenAsync(user);
+
+                var confirmationLink = Url.Action(
+                    "ConfirmEmail",
+                    "Account",
+                    new { userId = user.Id, token = token },
+                    Request.Scheme);
+
+                Console.WriteLine("EMAIL CONFIRMATION LINK: " + confirmationLink);
+                TempData["ConfirmLink"] = confirmationLink;
+
+                return RedirectToAction("EmailVerificationSent");
             }
 
             model.RegisterError = string.Join("<br>", result.Errors.Select(e => e.Description));
             return View("RegisterSignIn", model);
         }
+        [HttpGet]
+        public IActionResult EmailVerificationSent()
+        {
+            return View();
+        }
+        [HttpGet]
+        public async Task<IActionResult> ConfirmEmail(string userId, string token)
+        {
+            if (userId == null || token == null)
+                return BadRequest("Invalid confirmation link.");
+
+            var user = await _userManager.FindByIdAsync(userId);
+            if (user == null)
+                return NotFound("User not found.");
+
+            var result = await _userManager.ConfirmEmailAsync(user, token);
+
+            if (result.Succeeded)
+            {
+                TempData["Message"] = "Your email has been successfully confirmed.";
+                return RedirectToAction("ConfirmedEmail");
+            }
+
+            return BadRequest("Email confirmation failed.");
+        }
+        [HttpGet]
+        public IActionResult ConfirmedEmail()
+        {
+            return View();
+        }
+
     }
 }
