@@ -19,11 +19,12 @@ namespace CoreTripRex.Controllers
         {
             int? userId = HttpContext.Session.GetInt32("UserID");
             if (userId == null)
-                return RedirectToAction("Login", "Auth");
+                return RedirectToAction("Login", "Account");
 
             AccountInfoViewModel vm = LoadProfile(userId.Value);
             return View(vm);
         }
+
 
         private AccountInfoViewModel LoadProfile(int userId)
         {
