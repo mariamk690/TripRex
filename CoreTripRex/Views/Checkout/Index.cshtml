@@ -1,0 +1,80 @@
+﻿@model CoreTripRex.Models.Checkout.CheckoutViewModel
+
+@{
+    ViewData["Title"] = "Checkout";
+}
+
+<div class="container mt-4">
+    @if (!string.IsNullOrEmpty(Model.UserGreeting))
+    {
+        <h2>@Model.UserGreeting</h2>
+    }
+
+    @if (Model.HasMessage)
+    {
+        <div class="@Model.MessageCssClass">
+            @Model.Message
+        </div>
+    }
+
+    @if (Model.Items != null && Model.Items.Count > 0)
+    {
+        <table class="table table-striped mt-3">
+            <thead>
+                <tr>
+                    <th>Item</th>
+                    <th>Type</th>
+                    <th>Dates</th>
+                    <th>Qty</th>
+                    <th>Total</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var item in Model.Items)
+                {
+                    <tr>
+                        <td>@item.DisplayName</td>
+                        <td>@item.ServiceType</td>
+                        <td>@item.ComputedDates</td>
+                        <td>@item.ComputedQtyLabel</td>
+                        <td>$@item.ComputedTotal.ToString("F2")</td>
+                    </tr>
+                }
+            </tbody>
+            <tfoot>
+                <tr>
+                    <td colspan="4" class="text-end"><strong>Total</strong></td>
+                    <td><strong>$@Model.Total.ToString("F2")</strong></td>
+                </tr>
+            </tfoot>
+        </table>
+
+        <form asp-action="Index" method="post" class="mt-4">
+            <div class="mb-3">
+                <label class="form-label">
+                    <input type="radio" name="AddCard" value="true" @(Model.AddCard ? "checked" : "") />
+                    Use a new card
+                </label>
+                <label class="form-label ms-3">
+                    <input type="radio" name="AddCard" value="false" @(Model.AddCard ? "" : "checked") />
+                    Use my saved card
+                </label>
+            </div>
+
+            <div id="new-card-fields" class="border rounded p-3 mb-3">
+                <div class="mb-3">
+                    <label class="form-label">Card Number</label>
+                    <input asp-for="CardNumber" class="form-control" />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Expiration (MM/YY)</label>
+                    <input asp-for="Exp" class="form-control" />
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary">
+                Confirm and Book
+            </button>
+        </form>
+    }
+</div>
