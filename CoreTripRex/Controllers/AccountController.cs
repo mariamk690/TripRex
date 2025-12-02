@@ -12,14 +12,17 @@ namespace CoreTripRex.Controllers
         private readonly UserManager<AppUser> _userManager;
         private readonly SignInManager<AppUser> _signInManager;
         private readonly ApplicationDbContext _context;
+        private readonly IEmailService _email;
 
         public AccountController(UserManager<AppUser> userManager,
                                  SignInManager<AppUser> signInManager,
-                                 ApplicationDbContext context)
+                                 ApplicationDbContext context,
+                                 IEmailService email)
         {
             _userManager = userManager;
             _signInManager = signInManager;
             _context = context;
+            _email = email;
         }
 
         // LOGIN GET
@@ -59,6 +62,12 @@ namespace CoreTripRex.Controllers
 
             // Find user BY EMAIL
             var user = await _userManager.FindByEmailAsync(model.LoginEmail);
+            if (user != null && !user.EmailConfirmed)
+            {
+                model.LoginError = "Please verify your email before logging in.";
+                return View("RegisterSignIn", model);
+            }
+
             if (user == null)
             {
                 model.LoginError = "Invalid email or password.";
@@ -114,6 +123,7 @@ namespace CoreTripRex.Controllers
                 model.ShowQuestion = true;
 
                 HttpContext.Session.SetString("RecoverUserId", user.Id);
+                ModelState.Clear();
 
                 return View(model);
             }
@@ -233,8 +243,11 @@ namespace CoreTripRex.Controllers
                     "Account",
                     new { token, email },
                     Request.Scheme);
-                //write email sending logic here to send the resetLink to user's email address
-                Console.WriteLine("RESET LINK: " + resetLink);
+                await _email.SendEmailAsync(
+                    user.Email,
+                    "Password Reset Request",
+                    $"You can reset your password by clicking this link: <a href='{resetLink}'>Reset Password</a>"
+                );
 
                 TempData["ResetLink"] = resetLink;
 
@@ -361,8 +374,11 @@ namespace CoreTripRex.Controllers
                     "Account",
                     new { userId = user.Id, token = token },
                     Request.Scheme);
-
-                Console.WriteLine("EMAIL CONFIRMATION LINK: " + confirmationLink);
+                await _email.SendEmailAsync(
+                    user.Email,
+                    "Confirm your email",
+                    $"Please confirm your account by clicking this link: <a href='{confirmationLink}'>Confirm Email</a>"
+                );
                 TempData["ConfirmLink"] = confirmationLink;
 
                 return RedirectToAction("EmailVerificationSent");
