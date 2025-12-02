@@ -1,4 +1,5 @@
 ﻿using CoreTripRex.Models.CurrentPackage;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using System;
@@ -8,6 +9,7 @@ using Utilities;
 
 namespace CoreTripRex.Controllers
 {
+    [Authorize]
     public class CurrentPackageController : Controller
     {
         private readonly StoredProcs _sp = new StoredProcs();
