@@ -55,6 +55,53 @@ namespace CoreTripRex.Controllers.DashboardControllers
 
             return View(model);
         }
+        [HttpPost]
+        public IActionResult AddFlightWithSeats(int flightId, int quantity)
+        {
+            try
+            {
+                var identityUser = _userManager.GetUserAsync(User).Result;
+                int? userId = identityUser?.LegacyUserId > 0 ? identityUser.LegacyUserId : (int?)null;
+
+                if (!userId.HasValue)
+                {
+                    TempData["DashboardError"] = "Please sign in to add flights to your cart.";
+                    return RedirectToAction("Index");
+                }
+
+                int packageId;
+                string packageIdStr = HttpContext.Session.GetString("PackageID");
+                if (!string.IsNullOrEmpty(packageIdStr) && int.TryParse(packageIdStr, out int pid))
+                    packageId = pid;
+                else
+                {
+                    packageId = sp.PackageGetOrCreate(userId.Value);
+                    HttpContext.Session.SetString("PackageID", packageId.ToString());
+                }
+
+                int result = sp.PackageAddUpdateItem(
+                    packageId,
+                    "Flight",
+                    flightId,
+                    quantity, 
+                    null,
+                    null
+                );
+
+                if (result >= 0 || result == -1)
+                    TempData["DashboardStatus"] = $"{quantity} seat(s) added to your cart.";
+                else
+                    TempData["DashboardError"] = "Failed to add seats to cart.";
+
+                return RedirectToAction("Index");
+            }
+            catch (Exception ex)
+            {
+                TempData["DashboardError"] = "Seat error: " + ex.Message;
+                return RedirectToAction("Index");
+            }
+        }
+
 
         [HttpPost]
         [ValidateAntiForgeryToken]
