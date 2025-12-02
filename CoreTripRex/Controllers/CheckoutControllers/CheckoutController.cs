@@ -1,35 +1,39 @@
 ﻿using CoreTripRex.Models.Checkout;
-using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Threading.Tasks;
 using CoreTripRex.Models;
 using TripRexLibraries;
 using Utilities;
 
-namespace TripRex.Controllers
+namespace CoreTripRex.Controllers
 {
     public class CheckoutController : Controller
     {
         private readonly StoredProcs _sp;
+        private readonly UserManager<AppUser> _userManager;
 
-        public CheckoutController()
+        public CheckoutController(UserManager<AppUser> userManager)
         {
             _sp = new StoredProcs();
+            _userManager = userManager;
         }
 
         [HttpGet]
-        public IActionResult Index()
+        public async Task<IActionResult> Index()
         {
-            var model = LoadCheckoutViewModel();
+            var model = await LoadCheckoutViewModel();
             return View(model);
         }
 
         [HttpPost]
-        public IActionResult Index(CheckoutViewModel form)
+        public async Task<IActionResult> Index(CheckoutViewModel form)
         {
-            var model = LoadCheckoutViewModel();
+            var model = await LoadCheckoutViewModel();
+
             if (!model.HasMessage && model.Items.Count == 0)
             {
                 model.HasMessage = true;
@@ -40,8 +44,8 @@ namespace TripRex.Controllers
 
             try
             {
-                string userIdRaw = HttpContext.Session.GetString("UserID");
-                if (string.IsNullOrEmpty(userIdRaw))
+                var user = await _userManager.GetUserAsync(User);
+                if (user == null || user.LegacyUserId <= 0)
                 {
                     model.HasMessage = true;
                     model.MessageCssClass = "text-danger d-block mb-3";
@@ -49,15 +53,9 @@ namespace TripRex.Controllers
                     return View(model);
                 }
 
-                int userId = Convert.ToInt32(userIdRaw);
+                int userId = user.LegacyUserId;
 
-                int packageId = 0;
-                string packageIdRaw = HttpContext.Session.GetString("PackageID");
-                if (!string.IsNullOrEmpty(packageIdRaw))
-                    packageId = Convert.ToInt32(packageIdRaw);
-                if (packageId == 0)
-                    packageId = _sp.PackageGetActive(userId);
-
+                int packageId = HttpContext.Session.GetInt32("PackageID") ?? _sp.PackageGetActive(userId);
                 if (packageId == 0)
                 {
                     model.HasMessage = true;
@@ -79,37 +77,26 @@ namespace TripRex.Controllers
 
                 if (form.AddCard)
                 {
-                    string cardNum = form.CardNumber;
-                    if (cardNum == null)
-                        cardNum = string.Empty;
-                    cardNum = cardNum.Replace(" ", "");
+                    string cardNum = form.CardNumber?.Replace(" ", "") ?? "";
+                    string exp = form.Exp?.Trim() ?? "";
 
-                    string exp = form.Exp;
-                    if (exp == null)
-                        exp = string.Empty;
-                    exp = exp.Trim();
+                    string brand = cardNum.StartsWith("4") ? "Visa" :
+                                   cardNum.StartsWith("5") ? "Mastercard" :
+                                   "Card";
 
-                    string brand = "Card";
-                    if (cardNum.StartsWith("4"))
-                        brand = "Visa";
-                    else if (cardNum.StartsWith("5"))
-                        brand = "Mastercard";
-
-                    string last4 = "0000";
-                    if (cardNum.Length >= 4)
-                        last4 = cardNum.Substring(cardNum.Length - 4);
+                    string last4 = cardNum.Length >= 4 ? cardNum[^4..] : "0000";
 
                     int expMonth = 0;
                     int expYear = 0;
+
                     if (exp.Contains("/"))
                     {
-                        string[] parts = exp.Split('/');
+                        var parts = exp.Split('/');
                         if (parts.Length >= 2)
                         {
                             int.TryParse(parts[0], out expMonth);
                             int.TryParse(parts[1], out expYear);
-                            if (expYear < 100)
-                                expYear += 2000;
+                            if (expYear < 100) expYear += 2000;
                         }
                     }
 
@@ -117,9 +104,7 @@ namespace TripRex.Controllers
 
                     DataSet ds = _sp.ListPaymentMethods(userId);
                     if (ds != null && ds.Tables.Count > 0 && ds.Tables[0].Rows.Count > 0)
-                    {
                         paymentMethodId = Convert.ToInt32(ds.Tables[0].Rows[0]["Id"]);
-                    }
                 }
                 else
                 {
@@ -127,10 +112,7 @@ namespace TripRex.Controllers
                     if (ds != null && ds.Tables.Count > 0 && ds.Tables[0].Rows.Count > 0)
                     {
                         DataRow[] defaults = ds.Tables[0].Select("is_default = 1");
-                        if (defaults.Length > 0)
-                            paymentMethodId = Convert.ToInt32(defaults[0]["Id"]);
-                        else
-                            paymentMethodId = Convert.ToInt32(ds.Tables[0].Rows[0]["Id"]);
+                        paymentMethodId = Convert.ToInt32((defaults.Length > 0 ? defaults[0]["Id"] : ds.Tables[0].Rows[0]["Id"]));
                     }
                 }
 
@@ -155,18 +137,11 @@ namespace TripRex.Controllers
                     {
                         Email mail = new Email();
 
-                        string userEmail = HttpContext.Session.GetString("UserEmail");
-                        if (string.IsNullOrEmpty(userEmail))
-                            userEmail = "student@temple.edu";
-
-                        string userName = HttpContext.Session.GetString("UserName");
-                        if (string.IsNullOrEmpty(userName))
-                            userName = "Traveler";
+                        string userEmail = user.Email ?? "student@temple.edu";
+                        string userName = user.FullName ?? "Traveler";
 
                         DataSet dsSummary = _sp.PackageGet(packageId);
-                        DataTable items = null;
-                        if (dsSummary != null && dsSummary.Tables.Count > 1)
-                            items = dsSummary.Tables[1];
+                        DataTable items = dsSummary?.Tables.Count > 1 ? dsSummary.Tables[1] : null;
 
                         if (items == null || items.Rows.Count == 0)
                         {
@@ -178,17 +153,11 @@ namespace TripRex.Controllers
                         string tripStartRaw = HttpContext.Session.GetString("TripStart");
                         string tripEndRaw = HttpContext.Session.GetString("TripEnd");
 
-                        DateTime tripStart;
-                        DateTime tripEnd;
-
-                        if (!DateTime.TryParse(tripStartRaw, out tripStart))
-                            tripStart = DateTime.MinValue;
-                        if (!DateTime.TryParse(tripEndRaw, out tripEnd))
-                            tripEnd = DateTime.MinValue;
+                        DateTime.TryParse(tripStartRaw, out DateTime tripStart);
+                        DateTime.TryParse(tripEndRaw, out DateTime tripEnd);
 
                         int totalDays = (tripEnd - tripStart).Days;
-                        if (totalDays < 1)
-                            totalDays = 1;
+                        if (totalDays < 1) totalDays = 1;
 
                         string detailsHtml = "<table style='border-collapse:collapse;width:100%;margin-top:10px' border='1' cellpadding='6'>" +
                                              "<tr style='background:#f2f2f2;text-align:left'>" +
@@ -199,21 +168,11 @@ namespace TripRex.Controllers
 
                         foreach (DataRow r in items.Rows)
                         {
-                            string name = "—";
-                            if (r["display_name"] != DBNull.Value)
-                                name = r["display_name"].ToString();
+                            string name = r["display_name"]?.ToString() ?? "—";
+                            string type = r["service_type"]?.ToString() ?? "—";
 
-                            string type = "—";
-                            if (r["service_type"] != DBNull.Value)
-                                type = r["service_type"].ToString();
-
-                            decimal unitPrice = 0;
-                            if (r["unit_price"] != DBNull.Value)
-                                unitPrice = Convert.ToDecimal(r["unit_price"]);
-
-                            decimal lineTotal = 0;
-                            if (r["line_total"] != DBNull.Value)
-                                lineTotal = Convert.ToDecimal(r["line_total"]);
+                            decimal unitPrice = r["unit_price"] != DBNull.Value ? Convert.ToDecimal(r["unit_price"]) : 0;
+                            decimal lineTotal = r["line_total"] != DBNull.Value ? Convert.ToDecimal(r["line_total"]) : 0;
 
                             decimal computedTotal = lineTotal;
                             string dates = "—";
@@ -222,34 +181,26 @@ namespace TripRex.Controllers
                             if (type == "Hotel" || type == "Car Rental")
                             {
                                 computedTotal = unitPrice * totalDays;
-                                dates = tripStart.ToString("MM/dd") + "–" + tripEnd.ToString("MM/dd");
-                                if (type == "Hotel")
-                                    qtyLabel = "x " + totalDays + " nights";
-                                else
-                                    qtyLabel = "x " + totalDays + " days";
+                                dates = $"{tripStart:MM/dd}–{tripEnd:MM/dd}";
+                                qtyLabel = type == "Hotel" ? $"x {totalDays} nights" : $"x {totalDays} days";
                             }
                             else if (r["start_utc"] != DBNull.Value && r["end_utc"] != DBNull.Value)
                             {
                                 DateTime startUtc = Convert.ToDateTime(r["start_utc"]);
                                 DateTime endUtc = Convert.ToDateTime(r["end_utc"]);
-                                dates = startUtc.ToString("MM/dd") + "–" + endUtc.ToString("MM/dd");
+                                dates = $"{startUtc:MM/dd}–{endUtc:MM/dd}";
                             }
 
                             grandTotal += computedTotal;
 
                             detailsHtml += "<tr>" +
-                                           "<td>" + name + "</td>" +
-                                           "<td>" + type + "</td>" +
-                                           "<td>" + dates + "</td>" +
-                                           "<td>" + qtyLabel + "</td>" +
-                                           "<td>$" + computedTotal.ToString("F2") + "</td>" +
+                                           $"<td>{name}</td><td>{type}</td><td>{dates}</td><td>{qtyLabel}</td><td>${computedTotal:F2}</td>" +
                                            "</tr>";
                         }
 
                         detailsHtml += "<tr style='font-weight:bold;background:#f9f9f9'>" +
                                        "<td colspan='4' style='text-align:right'>Total</td>" +
-                                       "<td>$" + grandTotal.ToString("F2") + "</td>" +
-                                       "</tr></table>";
+                                       $"<td>${grandTotal:F2}</td></tr></table>";
 
                         string subject = "TripRex Booking Confirmation";
                         string body = "<p>Hi " + userName + ",</p>" +
@@ -261,11 +212,7 @@ namespace TripRex.Controllers
 
                         mail.SendMail(userEmail, "tuo90411@temple.edu", subject, body);
                     }
-                    catch (Exception)
-                    {
-                        model.MessageCssClass = "text-danger d-block mb-3";
-                        model.Message = "Email send failed, but your booking was completed.";
-                    }
+                    catch { }
 
                     HttpContext.Session.Remove("PackageID");
                     model.Items.Clear();
@@ -288,12 +235,12 @@ namespace TripRex.Controllers
             return View(model);
         }
 
-        private CheckoutViewModel LoadCheckoutViewModel()
+        private async Task<CheckoutViewModel> LoadCheckoutViewModel()
         {
             var model = new CheckoutViewModel();
 
-            string userIdRaw = HttpContext.Session.GetString("UserID");
-            if (string.IsNullOrEmpty(userIdRaw))
+            var user = await _userManager.GetUserAsync(User);
+            if (user == null || user.LegacyUserId <= 0)
             {
                 model.HasMessage = true;
                 model.MessageCssClass = "text-warning d-block mb-3";
@@ -301,20 +248,11 @@ namespace TripRex.Controllers
                 return model;
             }
 
-            string userName = HttpContext.Session.GetString("UserName");
-            if (string.IsNullOrEmpty(userName))
-                userName = "Traveler";
-            model.UserGreeting = "Hi, " + userName + "!";
+            int userId = user.LegacyUserId;
 
-            int userId = Convert.ToInt32(userIdRaw);
+            model.UserGreeting = "Hi, " + (user.FullName ?? "Traveler") + "!";
 
-            int packageId = 0;
-            string packageIdRaw = HttpContext.Session.GetString("PackageID");
-            if (!string.IsNullOrEmpty(packageIdRaw))
-                packageId = Convert.ToInt32(packageIdRaw);
-            if (packageId == 0)
-                packageId = _sp.PackageGetActive(userId);
-
+            int packageId = HttpContext.Session.GetInt32("PackageID") ?? _sp.PackageGetActive(userId);
             if (packageId == 0)
             {
                 model.HasMessage = true;
@@ -337,38 +275,22 @@ namespace TripRex.Controllers
             string tripStartRaw = HttpContext.Session.GetString("TripStart");
             string tripEndRaw = HttpContext.Session.GetString("TripEnd");
 
-            DateTime tripStart;
-            DateTime tripEnd;
-
-            if (!DateTime.TryParse(tripStartRaw, out tripStart))
-                tripStart = DateTime.MinValue;
-            if (!DateTime.TryParse(tripEndRaw, out tripEnd))
-                tripEnd = DateTime.MinValue;
+            DateTime.TryParse(tripStartRaw, out DateTime tripStart);
+            DateTime.TryParse(tripEndRaw, out DateTime tripEnd);
 
             int totalDays = (tripEnd - tripStart).Days;
-            if (totalDays < 1)
-                totalDays = 1;
+            if (totalDays < 1) totalDays = 1;
 
             decimal total = 0;
             var list = new List<CheckoutItemViewModel>();
 
             foreach (DataRow r in items.Rows)
             {
-                string type = string.Empty;
-                if (r["service_type"] != DBNull.Value)
-                    type = r["service_type"].ToString();
+                string type = r["service_type"]?.ToString() ?? "";
+                string name = r["display_name"]?.ToString() ?? "—";
 
-                string name = "—";
-                if (r["display_name"] != DBNull.Value)
-                    name = r["display_name"].ToString();
-
-                decimal unitPrice = 0;
-                if (r["unit_price"] != DBNull.Value)
-                    unitPrice = Convert.ToDecimal(r["unit_price"]);
-
-                decimal lineTotal = 0;
-                if (r["line_total"] != DBNull.Value)
-                    lineTotal = Convert.ToDecimal(r["line_total"]);
+                decimal unitPrice = r["unit_price"] != DBNull.Value ? Convert.ToDecimal(r["unit_price"]) : 0;
+                decimal lineTotal = r["line_total"] != DBNull.Value ? Convert.ToDecimal(r["line_total"]) : 0;
 
                 decimal computedTotal = 0;
                 string dates = "—";
@@ -377,23 +299,23 @@ namespace TripRex.Controllers
                 if (type == "Hotel" || type == "Car Rental")
                 {
                     computedTotal = unitPrice * totalDays;
-                    dates = tripStart.ToString("MM/dd") + "–" + tripEnd.ToString("MM/dd");
-                    if (type == "Hotel")
-                        qtyLabel = "x " + totalDays + " nights";
-                    else
-                        qtyLabel = "x " + totalDays + " days";
+                    dates = $"{tripStart:MM/dd}–{tripEnd:MM/dd}";
+                    qtyLabel = type == "Hotel"
+                        ? $"x {totalDays} nights"
+                        : $"x {totalDays} days";
                     total += computedTotal;
                 }
                 else
                 {
                     computedTotal = lineTotal;
+
                     if (r["start_utc"] != DBNull.Value && r["end_utc"] != DBNull.Value)
                     {
                         DateTime startUtc = Convert.ToDateTime(r["start_utc"]);
                         DateTime endUtc = Convert.ToDateTime(r["end_utc"]);
-                        dates = startUtc.ToString("MM/dd") + "–" + endUtc.ToString("MM/dd");
+                        dates = $"{startUtc:MM/dd}–{endUtc:MM/dd}";
                     }
-                    qtyLabel = "x 1";
+
                     total += lineTotal;
                 }
 

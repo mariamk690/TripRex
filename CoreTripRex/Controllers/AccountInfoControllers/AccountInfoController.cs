@@ -1,88 +1,53 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using CoreTripRex.Models;
 using CoreTripRex.Models.AccountInfo;
-using TripRexLibraries;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc;
 using System.Data;
+using TripRexLibraries;
 using Utilities;
 
 namespace CoreTripRex.Controllers
 {
     public class AccountInfoController : Controller
     {
-        private StoredProcs _sp;
+        private readonly StoredProcs _sp;
+        private readonly UserManager<AppUser> _userManager;
 
-        public AccountInfoController()
+        public AccountInfoController(UserManager<AppUser> userManager)
         {
             _sp = new StoredProcs();
+            _userManager = userManager;
         }
 
-        public IActionResult Index()
+        public async Task<IActionResult> Index()
         {
-            int? userId = HttpContext.Session.GetInt32("UserID");
-            if (userId == null)
+            var appUser = await _userManager.GetUserAsync(User);
+            if (appUser == null)
                 return RedirectToAction("Login", "Account");
 
-            AccountInfoViewModel vm = LoadProfile(userId.Value);
+            int userId = appUser.LegacyUserId;
+            var vm = LoadProfile(userId);
             return View(vm);
         }
 
-
         private AccountInfoViewModel LoadProfile(int userId)
         {
-            AccountInfoViewModel vm = new AccountInfoViewModel();
-
+            var vm = new AccountInfoViewModel();
             DataSet ds = _sp.GetProfile(userId);
 
-            if (ds.Tables.Count > 0)
+            if (ds.Tables.Count > 0 && ds.Tables[0].Rows.Count > 0)
             {
-                if (ds.Tables[0].Rows.Count > 0)
-                {
-                    DataRow dr = ds.Tables[0].Rows[0];
+                DataRow dr = ds.Tables[0].Rows[0];
 
-                    if (dr["first_name"] == DBNull.Value)
-                        vm.FirstName = "";
-                    else
-                        vm.FirstName = dr["first_name"].ToString();
-
-                    if (dr["last_name"] == DBNull.Value)
-                        vm.LastName = "";
-                    else
-                        vm.LastName = dr["last_name"].ToString();
-
-                    if (dr["email"] == DBNull.Value)
-                        vm.Email = "";
-                    else
-                        vm.Email = dr["email"].ToString();
-
-                    if (dr["phone"] == DBNull.Value)
-                        vm.Phone = "";
-                    else
-                        vm.Phone = dr["phone"].ToString();
-
-                    if (dr["address"] == DBNull.Value)
-                        vm.Address = "";
-                    else
-                        vm.Address = dr["address"].ToString();
-
-                    if (dr["city"] == DBNull.Value)
-                        vm.City = "";
-                    else
-                        vm.City = dr["city"].ToString();
-
-                    if (dr["state"] == DBNull.Value)
-                        vm.State = "";
-                    else
-                        vm.State = dr["state"].ToString();
-
-                    if (dr["zip_code"] == DBNull.Value)
-                        vm.Zip = "";
-                    else
-                        vm.Zip = dr["zip_code"].ToString();
-
-                    if (dr["country"] == DBNull.Value)
-                        vm.Country = "";
-                    else
-                        vm.Country = dr["country"].ToString();
-                }
+                vm.FirstName = dr["first_name"] == DBNull.Value ? "" : dr["first_name"].ToString();
+                vm.LastName = dr["last_name"] == DBNull.Value ? "" : dr["last_name"].ToString();
+                vm.Email = dr["email"] == DBNull.Value ? "" : dr["email"].ToString();
+                vm.Phone = dr["phone"] == DBNull.Value ? "" : dr["phone"].ToString();
+                vm.Address = dr["address"] == DBNull.Value ? "" : dr["address"].ToString();
+                vm.City = dr["city"] == DBNull.Value ? "" : dr["city"].ToString();
+                vm.State = dr["state"] == DBNull.Value ? "" : dr["state"].ToString();
+                vm.Zip = dr["zip_code"] == DBNull.Value ? "" : dr["zip_code"].ToString();
+                vm.Country = dr["country"] == DBNull.Value ? "" : dr["country"].ToString();
             }
 
             vm.UserId = userId;
@@ -94,49 +59,22 @@ namespace CoreTripRex.Controllers
 
         private List<PaymentMethod> LoadPayments(int userId)
         {
-            List<PaymentMethod> list = new List<PaymentMethod>();
-
+            var list = new List<PaymentMethod>();
             DataSet ds = _sp.ListPaymentMethods(userId);
 
             if (ds.Tables.Count > 0)
             {
-                DataTable t = ds.Tables[0];
-                int i = 0;
-                while (i < t.Rows.Count)
+                foreach (DataRow dr in ds.Tables[0].Rows)
                 {
-                    DataRow dr = t.Rows[i];
-
-                    PaymentMethod p = new PaymentMethod();
-
-                    if (dr["id"] == DBNull.Value)
-                        p.Id = 0;
-                    else
-                        p.Id = Convert.ToInt32(dr["id"]);
-
-                    if (dr["brand"] == DBNull.Value)
-                        p.Brand = "";
-                    else
-                        p.Brand = dr["brand"].ToString();
-
-                    if (dr["last4"] == DBNull.Value)
-                        p.Last4 = "";
-                    else
-                        p.Last4 = dr["last4"].ToString();
-
-                    if (dr["exp_month"] == DBNull.Value)
-                        p.ExpMonth = 0;
-                    else
-                        p.ExpMonth = Convert.ToInt32(dr["exp_month"]);
-
-                    if (dr["exp_year"] == DBNull.Value)
-                        p.ExpYear = 0;
-                    else
-                        p.ExpYear = Convert.ToInt32(dr["exp_year"]);
-
-                    p.IsDefault = Convert.ToBoolean(dr["is_default"]);
-
-                    list.Add(p);
-                    i++;
+                    list.Add(new PaymentMethod
+                    {
+                        Id = dr["id"] == DBNull.Value ? 0 : Convert.ToInt32(dr["id"]),
+                        Brand = dr["brand"] == DBNull.Value ? "" : dr["brand"].ToString(),
+                        Last4 = dr["last4"] == DBNull.Value ? "" : dr["last4"].ToString(),
+                        ExpMonth = dr["exp_month"] == DBNull.Value ? 0 : Convert.ToInt32(dr["exp_month"]),
+                        ExpYear = dr["exp_year"] == DBNull.Value ? 0 : Convert.ToInt32(dr["exp_year"]),
+                        IsDefault = Convert.ToBoolean(dr["is_default"])
+                    });
                 }
             }
 
@@ -145,37 +83,19 @@ namespace CoreTripRex.Controllers
 
         private List<TripPackage> LoadTrips(int userId)
         {
-            List<TripPackage> list = new List<TripPackage>();
-
+            var list = new List<TripPackage>();
             DataSet ds = _sp.PastPackages(userId);
 
             if (ds.Tables.Count > 0)
             {
-                DataTable t = ds.Tables[0];
-                int i = 0;
-                while (i < t.Rows.Count)
+                foreach (DataRow dr in ds.Tables[0].Rows)
                 {
-                    DataRow dr = t.Rows[i];
-
-                    TripPackage tp = new TripPackage();
-
-                    if (dr["title"] == DBNull.Value)
-                        tp.Title = "";
-                    else
-                        tp.Title = dr["title"].ToString();
-
-                    if (dr["start_date"] == DBNull.Value)
-                        tp.StartDate = "";
-                    else
-                        tp.StartDate = dr["start_date"].ToString();
-
-                    if (dr["end_date"] == DBNull.Value)
-                        tp.EndDate = "";
-                    else
-                        tp.EndDate = dr["end_date"].ToString();
-
-                    list.Add(tp);
-                    i++;
+                    list.Add(new TripPackage
+                    {
+                        Title = dr["title"] == DBNull.Value ? "" : dr["title"].ToString(),
+                        StartDate = dr["start_date"] == DBNull.Value ? "" : dr["start_date"].ToString(),
+                        EndDate = dr["end_date"] == DBNull.Value ? "" : dr["end_date"].ToString()
+                    });
                 }
             }
 
@@ -183,14 +103,16 @@ namespace CoreTripRex.Controllers
         }
 
         [HttpPost]
-        public IActionResult Save(AccountInfoViewModel model)
+        public async Task<IActionResult> Save(AccountInfoViewModel model)
         {
-            int? userId = HttpContext.Session.GetInt32("UserID");
-            if (userId == null)
-                return RedirectToAction("Login", "Auth");
+            var appUser = await _userManager.GetUserAsync(User);
+            if (appUser == null)
+                return RedirectToAction("Login", "Account");
+
+            int userId = appUser.LegacyUserId;
 
             int result = _sp.UpdateProfile(
-                userId.Value,
+                userId,
                 model.FirstName,
                 model.LastName,
                 model.Email,
@@ -202,105 +124,75 @@ namespace CoreTripRex.Controllers
                 model.Country
             );
 
-            AccountInfoViewModel vm = LoadProfile(userId.Value);
-
-            if (result > 0)
-                vm.Message = "Profile updated successfully.";
-            else
-                vm.Message = "No changes were made.";
+            var vm = LoadProfile(userId);
+            vm.Message = result > 0 ? "Profile updated successfully." : "No changes were made.";
 
             return View("Index", vm);
         }
 
         [HttpPost]
-        public IActionResult AddPayment(AccountInfoViewModel model)
+        public async Task<IActionResult> AddPayment(AccountInfoViewModel model)
         {
-            int? userId = HttpContext.Session.GetInt32("UserID");
-            if (userId == null)
-                return RedirectToAction("Login", "Auth");
+            var appUser = await _userManager.GetUserAsync(User);
+            if (appUser == null)
+                return RedirectToAction("Login", "Account");
 
-            string card = model.CardNumber;
-            if (card == null)
-                card = "";
+            int userId = appUser.LegacyUserId;
 
-            int len = card.Length;
-            string last4 = card;
-            if (len >= 4)
-                last4 = card.Substring(len - 4, 4);
+            string card = model.CardNumber ?? "";
+            string last4 = card.Length >= 4 ? card[^4..] : card;
 
             string brand = DetectBrand(card);
 
             int expMonth = 0;
             int expYear = 0;
 
-            string exp = model.Expiration;
-            if (exp != null)
+            if (!string.IsNullOrEmpty(model.Expiration) && model.Expiration.Contains("/"))
             {
-                if (exp.Contains("/"))
-                {
-                    string[] parts = exp.Split("/");
-                    int m;
-                    int y;
-
-                    if (int.TryParse(parts[0], out m))
-                        expMonth = m;
-
-                    if (int.TryParse(parts[1], out y))
-                    {
-                        if (y < 100)
-                            y = y + 2000;
-
-                        expYear = y;
-                    }
-                }
+                var parts = model.Expiration.Split("/");
+                int.TryParse(parts[0], out expMonth);
+                if (int.TryParse(parts[1], out expYear) && expYear < 100)
+                    expYear += 2000;
             }
 
-            _sp.AddPaymentMethod(userId.Value, brand, last4, expMonth, expYear, false);
+            _sp.AddPaymentMethod(userId, brand, last4, expMonth, expYear, false);
 
             return RedirectToAction("Index");
         }
 
         [HttpPost]
-        public IActionResult DeletePayment(int id)
+        public async Task<IActionResult> DeletePayment(int id)
         {
-            int? userId = HttpContext.Session.GetInt32("UserID");
-            if (userId == null)
-                return RedirectToAction("Login", "Auth");
+            var appUser = await _userManager.GetUserAsync(User);
+            if (appUser == null)
+                return RedirectToAction("Login", "Account");
 
-            _sp.DeletePaymentMethod(userId.Value, id);
+            int userId = appUser.LegacyUserId;
+            _sp.DeletePaymentMethod(userId, id);
 
             return RedirectToAction("Index");
         }
 
         [HttpPost]
-        public IActionResult SetDefault(int id)
+        public async Task<IActionResult> SetDefault(int id)
         {
-            int? userId = HttpContext.Session.GetInt32("UserID");
-            if (userId == null)
-                return RedirectToAction("Login", "Auth");
+            var appUser = await _userManager.GetUserAsync(User);
+            if (appUser == null)
+                return RedirectToAction("Login", "Account");
 
-            _sp.SetDefaultPaymentMethod(userId.Value, id);
+            int userId = appUser.LegacyUserId;
+            _sp.SetDefaultPaymentMethod(userId, id);
 
             return RedirectToAction("Index");
         }
 
         private string DetectBrand(string card)
         {
-            if (card == null)
-                return "Unknown";
-
-            if (card.StartsWith("4"))
-                return "Visa";
-
-            if (card.StartsWith("5"))
-                return "Mastercard";
-
-            if (card.StartsWith("3"))
-                return "Amex";
-
-            if (card.StartsWith("6"))
-                return "Discover";
-
+            if (string.IsNullOrEmpty(card)) return "Unknown";
+            if (card.StartsWith("4")) return "Visa";
+            if (card.StartsWith("5")) return "Mastercard";
+            if (card.StartsWith("3")) return "Amex";
+            if (card.StartsWith("6")) return "Discover";
             return "Card";
         }
     }

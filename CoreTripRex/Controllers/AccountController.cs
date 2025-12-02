@@ -4,6 +4,7 @@ using CoreTripRex.Models.RegisterSignInVM;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Utilities;
 
 namespace CoreTripRex.Controllers
 {
@@ -13,7 +14,7 @@ namespace CoreTripRex.Controllers
         private readonly SignInManager<AppUser> _signInManager;
         private readonly ApplicationDbContext _context;
         private readonly IEmailService _email;
-
+        private StoredProcs _sp = new StoredProcs();
         public AccountController(UserManager<AppUser> userManager,
                                  SignInManager<AppUser> signInManager,
                                  ApplicationDbContext context,
@@ -84,6 +85,7 @@ namespace CoreTripRex.Controllers
 
             // Actually sign in user
             await _signInManager.SignInAsync(user, false);
+            HttpContext.Session.SetInt32("UserID", user.LegacyUserId);
 
             return RedirectToAction("Index", "Dashboard");
         }
@@ -308,6 +310,8 @@ namespace CoreTripRex.Controllers
         public async Task<IActionResult> Logout()
         {
             await _signInManager.SignOutAsync();
+            HttpContext.Session.Clear();
+
             Response.Cookies.Delete("SavedLoginEmail");
             return RedirectToAction("Index", "Dashboard");
         }
@@ -338,35 +342,65 @@ namespace CoreTripRex.Controllers
                 FullName = model.FullName
             };
 
+            // 1. Create Identity user
             var result = await _userManager.CreateAsync(user, model.Password);
 
             if (result.Succeeded)
             {
+                // 2. Insert into legacy TripRex DB
+                // Identity hashed password we can rehash for legacy DB
+                var hasher = new System.Security.Cryptography.SHA256Managed();
+                byte[] passwordHash = hasher.ComputeHash(System.Text.Encoding.UTF8.GetBytes(model.Password));
+                string firstName = "";
+                string lastName = "";
+
+                if (!string.IsNullOrEmpty(model.FullName))
+                {
+                    var parts = model.FullName.Trim().Split(' ', 2); 
+
+                    firstName = parts.Length > 0 ? parts[0] : "";
+                    lastName = parts.Length > 1 ? parts[1] : "";
+                }
+                int legacyUserId = _sp.AccountRegister(
+                    "Registered",
+                    firstName,
+                    lastName,
+                    model.Email,
+                    passwordHash,
+                    model.Phone
+                );
+
+                // 3. Store numeric legacy ID inside Identity user
+                user.LegacyUserId = legacyUserId;
+                await _userManager.UpdateAsync(user);
+
+                // 4. Insert security questions
                 var questions = new List<UserSecurityQuestions>
         {
             new UserSecurityQuestions
             {
                 UserId = user.Id,
-                Question = model.SecurityQuestion1 ?? string.Empty,
-                AnswerHash = _userManager.PasswordHasher.HashPassword(user, model.SecurityAnswer1 ?? string.Empty)
+                Question = model.SecurityQuestion1 ?? "",
+                AnswerHash = _userManager.PasswordHasher.HashPassword(user, model.SecurityAnswer1 ?? "")
             },
             new UserSecurityQuestions
             {
                 UserId = user.Id,
-                Question = model.SecurityQuestion2 ?? string.Empty,
-                AnswerHash = _userManager.PasswordHasher.HashPassword(user, model.SecurityAnswer2 ?? string.Empty)
+                Question = model.SecurityQuestion2 ?? "",
+                AnswerHash = _userManager.PasswordHasher.HashPassword(user, model.SecurityAnswer2 ?? "")
             },
             new UserSecurityQuestions
             {
                 UserId = user.Id,
-                Question = model.SecurityQuestion3 ?? string.Empty,
-                AnswerHash = _userManager.PasswordHasher.HashPassword(user, model.SecurityAnswer3 ?? string.Empty)
+                Question = model.SecurityQuestion3 ?? "",
+                AnswerHash = _userManager.PasswordHasher.HashPassword(user, model.SecurityAnswer3 ?? "")
             }
         };
 
                 _context.UserSecurityQuestions.AddRange(questions);
                 await _context.SaveChangesAsync();
 
+                // 5. Send email confirmation
                 var token = await _userManager.GenerateEmailConfirmationTokenAsync(user);
 
                 var confirmationLink = Url.Action(
@@ -374,19 +408,21 @@ namespace CoreTripRex.Controllers
                     "Account",
                     new { userId = user.Id, token = token },
                     Request.Scheme);
+
                 await _email.SendEmailAsync(
                     user.Email,
                     "Confirm your email",
                     $"Please confirm your account by clicking this link: <a href='{confirmationLink}'>Confirm Email</a>"
                 );
-                TempData["ConfirmLink"] = confirmationLink;
 
+                TempData["ConfirmLink"] = confirmationLink;
                 return RedirectToAction("EmailVerificationSent");
             }
 
             model.RegisterError = string.Join("<br>", result.Errors.Select(e => e.Description));
             return View("RegisterSignIn", model);
         }
+
         [HttpGet]
         public IActionResult EmailVerificationSent()
         {

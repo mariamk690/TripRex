@@ -222,9 +222,7 @@ namespace CoreTripRex.Controllers.DashboardControllers
         }
         private int? GetUserIdFromSession()
         {
-            var val = HttpContext.Session.GetString("UserID");
-            if (!string.IsNullOrEmpty(val) && int.TryParse(val, out int id)) return id;
-            return null;
+            return HttpContext.Session.GetInt32("UserID");
         }
 
         private void TryLoadSavedSearch(int userId, DashboardViewModel model)
