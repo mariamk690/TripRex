@@ -26,9 +26,13 @@
 							<span asp-validation-for="LoginPassword" class="text-danger small"></span>
 						</div>
 						<div class="form-check mb-3">
-							<input type="checkbox" class="form-check-input" name="RememberEmail" />
+							<input type="checkbox"
+								   class="form-check-input"
+								   name="RememberEmail"
+								   @(string.IsNullOrEmpty(Model.LoginEmail) ? "" : "checked") />
 							<label class="form-check-label">Remember my email</label>
 						</div>
+
 						@if (!string.IsNullOrEmpty(Model.LoginError))
 						{
 							<div class="text-danger small mb-2">@Model.LoginError</div>

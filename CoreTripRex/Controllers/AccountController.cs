@@ -1,6 +1,7 @@
 ﻿using CoreTripRex.Data;
 using CoreTripRex.Models;
 using CoreTripRex.Models.RegisterSignInVM;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -47,7 +48,7 @@ namespace CoreTripRex.Controllers
                 return View("RegisterSignIn", model);
             }
 
-            // ----- REMEMBER EMAIL COOKIE -----
+            // ----- REMEMBER EMAIL COOKIE ONLY -----
             if (Request.Form["RememberEmail"] == "on")
             {
                 Response.Cookies.Append("SavedLoginEmail", model.LoginEmail, new CookieOptions
@@ -59,23 +60,19 @@ namespace CoreTripRex.Controllers
             {
                 Response.Cookies.Delete("SavedLoginEmail");
             }
-            // ----------------------------------
-
-            // Find user BY EMAIL
             var user = await _userManager.FindByEmailAsync(model.LoginEmail);
-            if (user != null && !user.EmailConfirmed)
-            {
-                model.LoginError = "Please verify your email before logging in.";
-                return View("RegisterSignIn", model);
-            }
-
             if (user == null)
             {
                 model.LoginError = "Invalid email or password.";
                 return View("RegisterSignIn", model);
             }
 
-            // Verify password
+            if (!user.EmailConfirmed)
+            {
+                model.LoginError = "Please verify your email before logging in.";
+                return View("RegisterSignIn", model);
+            }
+
             var pwCheck = await _signInManager.CheckPasswordSignInAsync(user, model.LoginPassword, false);
             if (!pwCheck.Succeeded)
             {
@@ -83,12 +80,21 @@ namespace CoreTripRex.Controllers
                 return View("RegisterSignIn", model);
             }
 
-            // Actually sign in user
-            await _signInManager.SignInAsync(user, false);
+            var authProps = new AuthenticationProperties
+            {
+                IsPersistent = false,
+                AllowRefresh = false,
+                ExpiresUtc = null
+            };
+
+            await _signInManager.SignInAsync(user, authProps);
+
+
             HttpContext.Session.SetInt32("UserID", user.LegacyUserId);
 
             return RedirectToAction("Index", "Dashboard");
         }
+
         [HttpGet]
         public IActionResult ForgotUsername()
         {
@@ -311,8 +317,6 @@ namespace CoreTripRex.Controllers
         {
             await _signInManager.SignOutAsync();
             HttpContext.Session.Clear();
-
-            Response.Cookies.Delete("SavedLoginEmail");
             return RedirectToAction("Index", "Dashboard");
         }
 

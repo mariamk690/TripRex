@@ -20,12 +20,40 @@ builder.Services.AddIdentity<AppUser, IdentityRole>(options =>
     options.Password.RequireLowercase = false;
     options.Password.RequireNonAlphanumeric = false;
     options.Password.RequireUppercase = false;
-    options.Password.RequiredLength = 1; 
+    options.Password.RequiredLength = 1;
     options.Password.RequiredUniqueChars = 0;
+
     options.SignIn.RequireConfirmedAccount = false;
 })
 .AddEntityFrameworkStores<ApplicationDbContext>()
 .AddDefaultTokenProviders();
+
+// Disable Identity auto-refresh that causes “auto-login”
+builder.Services.Configure<SecurityStampValidatorOptions>(options =>
+{
+    options.ValidationInterval = TimeSpan.Zero;
+});
+
+// ------------------- AUTH COOKIE CONFIGURATION -------------------
+builder.Services.ConfigureApplicationCookie(options =>
+{
+    options.ExpireTimeSpan = TimeSpan.FromMinutes(30);
+    options.SlidingExpiration = false;
+
+    options.Cookie.IsEssential = true;
+    options.Cookie.HttpOnly = true;
+    options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+
+    options.LoginPath = "/Account/Login";
+    options.LogoutPath = "/Account/Logout";
+
+    //  Prevent persistent cookie
+    options.Events.OnSigningIn = ctx =>
+    {
+        ctx.Properties.IsPersistent = false;
+        return Task.CompletedTask;
+    };
+});
 
 // ------------------- MVC + SESSION + EMAIL -------------------
 builder.Services.AddControllersWithViews();
@@ -54,12 +82,11 @@ app.UseRouting();
 
 app.UseSession();
 
-// IMPORTANT: Authentication before Authorization
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllerRoute(
     name: "default",
-    pattern: "{controller=Home}/{action=Index}/{id?}");
+    pattern: "{controller=Dashboard}/{action=Index}/{id?}");
 
 app.Run();

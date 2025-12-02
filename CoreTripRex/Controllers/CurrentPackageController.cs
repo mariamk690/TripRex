@@ -1,6 +1,7 @@
-﻿using CoreTripRex.Models.CurrentPackage;
+﻿using CoreTripRex.Models;
+using CoreTripRex.Models.CurrentPackage;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using System;
 using System.Data;
@@ -13,21 +14,29 @@ namespace CoreTripRex.Controllers
     public class CurrentPackageController : Controller
     {
         private readonly StoredProcs _sp = new StoredProcs();
+        private readonly UserManager<AppUser> _userManager;
+
+        public CurrentPackageController(UserManager<AppUser> userManager)
+        {
+            _userManager = userManager;
+        }
 
         [HttpGet]
-        public IActionResult Index()
+        public async Task<IActionResult> Index()
         {
-            var model = BuildCurrentPackageViewModel();
+            var model = await BuildCurrentPackageViewModel();
             return View(model);
         }
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public IActionResult RemoveItem(int refId, string serviceType)
+        public async Task<IActionResult> RemoveItem(int refId, string serviceType)
         {
             try
             {
-                int? userId = HttpContext.Session.GetInt32("UserID");
+                var identityUser = await _userManager.GetUserAsync(User);
+                int? userId = identityUser?.LegacyUserId > 0 ? identityUser.LegacyUserId : (int?)null;
+
                 if (!userId.HasValue)
                 {
                     TempData["Message"] = "Please sign in first.";
@@ -35,8 +44,6 @@ namespace CoreTripRex.Controllers
                 }
 
                 int packageId = _sp.PackageGetOrCreate(userId.Value);
-
-                // Same as WebForms: set qty = 0 to remove
                 _sp.PackageAddUpdateItem(packageId, serviceType, refId, 0, null, null);
 
                 TempData["Message"] = null;
@@ -49,18 +56,16 @@ namespace CoreTripRex.Controllers
             return RedirectToAction("Index");
         }
 
-        // --- logic ported from LoadPackage() ---
-        private CurrentPackageVM BuildCurrentPackageViewModel()
+        private async Task<CurrentPackageVM> BuildCurrentPackageViewModel()
         {
             var model = new CurrentPackageVM();
 
             if (TempData.ContainsKey("Message"))
-            {
                 model.Message = TempData["Message"] as string;
-            }
 
-            // Equivalent of Session["UserID"] check
-            int? userId = HttpContext.Session.GetInt32("UserID");
+            var identityUser = await _userManager.GetUserAsync(User);
+            int? userId = identityUser?.LegacyUserId > 0 ? identityUser.LegacyUserId : (int?)null;
+
             if (!userId.HasValue)
             {
                 if (string.IsNullOrEmpty(model.Message))
@@ -77,6 +82,7 @@ namespace CoreTripRex.Controllers
             {
                 if (string.IsNullOrEmpty(model.Message))
                     model.Message = "Your package is currently empty.";
+
                 model.HasPackage = false;
                 return model;
             }
@@ -86,13 +92,8 @@ namespace CoreTripRex.Controllers
             string tripStartStr = HttpContext.Session.GetString("TripStart");
             string tripEndStr = HttpContext.Session.GetString("TripEnd");
 
-            DateTime tripStart = !string.IsNullOrEmpty(tripStartStr)
-                ? Convert.ToDateTime(tripStartStr)
-                : DateTime.MinValue;
-
-            DateTime tripEnd = !string.IsNullOrEmpty(tripEndStr)
-                ? Convert.ToDateTime(tripEndStr)
-                : DateTime.MinValue;
+            DateTime tripStart = DateTime.TryParse(tripStartStr, out var ts) ? ts : DateTime.MinValue;
+            DateTime tripEnd = DateTime.TryParse(tripEndStr, out var te) ? te : DateTime.MinValue;
 
             int totalDays = (tripEnd - tripStart).Days;
             if (totalDays < 1) totalDays = 1;
