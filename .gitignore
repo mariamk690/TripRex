@@ -361,7 +361,3 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
-
-TripRex/Utilities/Connection.cs
-/Utilities/Connection.cs
-/CoreTripRex/appsettings.json

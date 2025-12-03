@@ -211,41 +211,6 @@ namespace AirlineController.Controllers
         {
             return travelSiteId == "TripRex" && apiToken == "ABC123TOKEN";
         }
-        [HttpGet("GetSeats")]
-        public List<Seat> GetSeats(int flightId)
-        {
-            Console.WriteLine($"GetSeats was called for flight {flightId}");
-
-            var seats = new List<Seat>();
-
-            string[] cols = { "A", "B", "C", "D", "E", "F" };
-
-            for (int row = 1; row <= 10; row++)
-            {
-                foreach (var col in cols)
-                {
-                    seats.Add(new Seat
-                    {
-                        SeatNumber = $"{row}{col}",
-                        IsAvailable = true 
-                    });
-                }
-            }
-
-            return seats;
-        }
-        [HttpPost("SelectSeat")]
-        public IActionResult SelectSeat([FromBody] SeatSelectionRequest req)
-        {
-            Console.WriteLine($"SelectSeat was called. Seats: {string.Join(", ", req.Seats)}");
-            return Ok(new
-            {
-                Message = "Seats reserved successfully",
-                Seats = req.Seats
-            });
-        }
-
-
     }
 
     public class AirCarrier
@@ -309,16 +274,4 @@ namespace AirlineController.Controllers
         public string Email { get; set; }
         public string Phone { get; set; }
     }
-    public class Seat
-    {
-        public string SeatNumber { get; set; }
-        public bool IsAvailable { get; set; }
-    }
-    public class SeatSelectionRequest
-    {
-        public int FlightID { get; set; }
-        public List<string> Seats { get; set; }
-    }
-
-
 }

@@ -11,8 +11,6 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TripRexLibraries", "TripRex
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AirlineController", "AirlineController\AirlineController.csproj", "{2B60BF63-29A4-4CB5-8B21-05A44631D05C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CoreTripRex", "CoreTripRex\CoreTripRex.csproj", "{01E6D3E7-27E3-44EE-9DB7-DC9377202612}"
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -35,10 +33,6 @@ Global
 		{2B60BF63-29A4-4CB5-8B21-05A44631D05C}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{2B60BF63-29A4-4CB5-8B21-05A44631D05C}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{2B60BF63-29A4-4CB5-8B21-05A44631D05C}.Release|Any CPU.Build.0 = Release|Any CPU
-		{01E6D3E7-27E3-44EE-9DB7-DC9377202612}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{01E6D3E7-27E3-44EE-9DB7-DC9377202612}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{01E6D3E7-27E3-44EE-9DB7-DC9377202612}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{01E6D3E7-27E3-44EE-9DB7-DC9377202612}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
