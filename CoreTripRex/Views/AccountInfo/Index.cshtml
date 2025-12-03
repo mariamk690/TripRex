@@ -151,34 +151,61 @@
             <div class="accordion" id="pastTrips">
                 @if (Model.PastTrips != null && Model.PastTrips.Count > 0)
                 {
-                    var idx = 0;
-                    foreach (var t in Model.PastTrips)
+                    @for (var i = 0; i < Model.PastTrips.Count; i++)
                     {
+                        var t = Model.PastTrips[i];
+                        var headingId = $"pastTripHeading{i}";
+                        var collapseId = $"pastTripCollapse{i}";
+
                         <div class="accordion-item">
-                            <h2 class="accordion-header" id="heading@idx">
+                            <h2 class="accordion-header" id="@headingId">
                                 <button class="accordion-button collapsed"
                                         type="button"
                                         data-bs-toggle="collapse"
-                                        data-bs-target="#collapse@idx"
-                                        aria-expanded="false">
+                                        data-bs-target="#@collapseId"
+                                        aria-expanded="false"
+                                        aria-controls="@collapseId">
                                     @t.Title
                                 </button>
                             </h2>
 
-                            <div id="collapse@idx"
+                            <div id="@collapseId"
                                  class="accordion-collapse collapse"
-                                 aria-labelledby="heading@idx"
+                                 aria-labelledby="@headingId"
                                  data-bs-parent="#pastTrips">
-
                                 <div class="accordion-body">
                                     <strong>Start:</strong> @t.StartDate<br />
                                     <strong>End:</strong> @t.EndDate
-                                </div>
 
+                                    @* booked items *@
+                                    @if (t.Items != null && t.Items.Count > 0)
+                                    {
+                                        <hr />
+                                        <div class="small">
+                                            <strong>Booked items</strong>
+                                            <ul class="list-unstyled mb-0 mt-2">
+                                                @foreach (var item in t.Items)
+                                                {
+                                                    <li class="mb-1">
+                                                        <span class="fw-semibold">@item.Type</span>
+                                                        @if (!string.IsNullOrEmpty(item.Name))
+                                                        {
+                                                            @: - @item.Name
+                                                        }
+                                                        @if (!string.IsNullOrEmpty(item.StartDate) || !string.IsNullOrEmpty(item.EndDate))
+                                                        {
+                                                            <span class="text-muted">
+                                                                (@item.StartDate - @item.EndDate)
+                                                            </span>
+                                                        }
+                                                    </li>
+                                                }
+                                            </ul>
+                                        </div>
+                                    }
+                                </div>
                             </div>
                         </div>
-
-                        idx = idx + 1;
                     }
                 }
                 else
@@ -186,6 +213,8 @@
                     <div class="text-muted small p-3">No past trips found.</div>
                 }
             </div>
+
+
 
         </div>
 

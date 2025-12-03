@@ -1,5 +1,7 @@
 ﻿using CoreTripRex.Models;
+using CoreTripRex.Models.CarAPI;
 using CoreTripRex.Models.Dashboard;
+using CoreTripRex.Services;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using System;
@@ -16,10 +18,11 @@ namespace CoreTripRex.Controllers.DashboardControllers
         private readonly StoredProcs sp = new StoredProcs();
         private readonly UserManager<AppUser> _userManager;
         private static readonly Random rand = new Random();
-
-        public DashboardController(UserManager<AppUser> userManager)
+        private readonly CarApiService _carApi;
+        public DashboardController(UserManager<AppUser> userManager, CarApiService carApi)
         {
             _userManager = userManager;
+            _carApi = carApi;
         }
 
         [HttpGet]
@@ -40,7 +43,7 @@ namespace CoreTripRex.Controllers.DashboardControllers
             {
                 model.ShowResumeButton = true;
                 model.StatusMessage = "Welcome back! You can resume your previous session.";
-                TrySaveSearch(userId.Value, model);
+                TryLoadSavedSearch(userId.Value, model);
                 model.Cart = LoadCartVm(userId.Value, model);
             }
             else
@@ -83,7 +86,7 @@ namespace CoreTripRex.Controllers.DashboardControllers
                     packageId,
                     "Flight",
                     flightId,
-                    quantity, 
+                    quantity,
                     null,
                     null
                 );
@@ -105,6 +108,7 @@ namespace CoreTripRex.Controllers.DashboardControllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
+
         public async Task<IActionResult> Search(DashboardViewModel model)
         {
             model.ErrorMessage = null;
@@ -112,8 +116,13 @@ namespace CoreTripRex.Controllers.DashboardControllers
 
             try
             {
-                if (!model.StartDate.HasValue || !model.EndDate.HasValue) throw new Exception("Enter valid start and end date.");
-                if (string.IsNullOrWhiteSpace(model.Origin) || string.IsNullOrWhiteSpace(model.Destination)) throw new Exception("Fill in both location fields.");
+                if (!model.StartDate.HasValue || !model.EndDate.HasValue)
+                    throw new Exception("Enter valid start and end date.");
+                if (string.IsNullOrWhiteSpace(model.Origin) || string.IsNullOrWhiteSpace(model.Destination))
+                    throw new Exception("Fill in both location fields.");
+
+                model.Origin = model.Origin.Trim();
+                model.Destination = model.Destination.Trim();
 
                 DateTime startDate = model.StartDate.Value;
                 DateTime endDate = model.EndDate.Value;
@@ -128,8 +137,6 @@ namespace CoreTripRex.Controllers.DashboardControllers
 
                 var identityUser = await _userManager.GetUserAsync(User);
                 int? userId = identityUser?.LegacyUserId > 0 ? identityUser.LegacyUserId : (int?)null;
-
-                if (userId.HasValue) TryLoadSavedSearch(userId.Value, model);
 
                 if (model.IncludeFlights)
                 {
@@ -146,7 +153,7 @@ namespace CoreTripRex.Controllers.DashboardControllers
                 }
                 else model.ShowFlights = false;
 
-                if (model.IncludeCars)
+                if (model.IncludeHotels)
                 {
                     try
                     {
@@ -166,19 +173,57 @@ namespace CoreTripRex.Controllers.DashboardControllers
                 {
                     try
                     {
-                        var dsCars = sp.CarsSearch(destCityId);
-                        model.CarVendors = LoadCarsVm(dsCars);
-                        model.ShowCars = model.CarVendors.Count > 0;
+                        string city = model.Destination;
+                        string state = ResolveState(city);
+
+                        var agencies = await _carApi.GetAgencies(city, state);
+
+                        var carVendors = new List<CarVendorVM>();
+
+                        foreach (var agency in agencies)
+                        {
+                            var cars = await _carApi.GetCars(agency.AgencyID, city, state);
+
+                            var vendor = new CarVendorVM
+                            {
+                                VendorID = agency.AgencyID,
+                                Agency = agency.AgencyName,
+                                Caption = "Available rental vehicles",
+                                StartingPrice = cars.Any() ? (decimal)cars.Min(c => c.DailyRate) : 0m,
+                                ImageUrl = Url.Content("~/images/placeholders/car.png")
+                            };
+
+                            foreach (var car in cars)
+                            {
+                                vendor.Cars.Add(new CarOptionVM
+                                {
+                                    ID = car.CarID,
+                                    Make = car.CompanyName,
+                                    Model = car.CarModel,
+                                    CarClass = car.CarType,
+                                    Seats = car.Seats,
+                                    DailyRate = (decimal)car.DailyRate,
+                                    ImageUrl = string.IsNullOrWhiteSpace(car.ImageURL)
+                                        ? "~/images/placeholders/car.png"
+                                        : car.ImageURL
+                                });
+                            }
+
+                            carVendors.Add(vendor);
+                        }
+
+                        model.CarVendors = carVendors;
+                        model.ShowCars = carVendors.Any();
                     }
                     catch (Exception ex)
                     {
-                        model.ErrorMessage = "Car error: " + ex.Message;
+                        model.ErrorMessage = "Car API error: " + ex.Message;
                         model.ShowCars = false;
                     }
                 }
                 else model.ShowCars = false;
 
-                if (model.IncludeCars)
+                if (model.IncludeEvents)
                 {
                     try
                     {
@@ -196,6 +241,7 @@ namespace CoreTripRex.Controllers.DashboardControllers
 
                 if (userId.HasValue)
                 {
+                    TrySaveSearch(userId.Value, model);
                     model.Cart = LoadCartVm(userId.Value, model);
                     model.ShowCart = model.Cart != null && model.Cart.Items.Count > 0;
                 }
@@ -209,6 +255,35 @@ namespace CoreTripRex.Controllers.DashboardControllers
                 return View("Index", model);
             }
         }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public IActionResult AddCar(int carId, string agency, string model,
+                            string carClass, int seats, decimal dailyRate,
+                            string? imageUrl)
+        {
+            try
+            {
+                int localCarId = sp.ApiRentalCarInsert(
+                    carId,
+                    agency,
+                    model,
+                    carClass,
+                    seats,
+                    dailyRate,
+                    imageUrl
+                );
+
+                return AddToPackage("Car Rental", localCarId);
+            }
+            catch (Exception ex)
+            {
+                TempData["DashboardError"] = "Car add error: " + ex.Message;
+                return RedirectToAction("Index");
+            }
+        }
+
+
 
         [HttpPost]
         [ValidateAntiForgeryToken]
@@ -457,7 +532,7 @@ namespace CoreTripRex.Controllers.DashboardControllers
                     Email = h.Table.Columns.Contains("email") ? h["email"].ToString() : string.Empty,
                     Caption = h.Table.Columns.Contains("caption") && h["caption"] != DBNull.Value ? h["caption"].ToString() : "Comfort and style near your destination",
                     StartingPrice = h.Table.Columns.Contains("starting_price") && h["starting_price"] != DBNull.Value ? Convert.ToDecimal(h["starting_price"]) : 0m,
-                    ImageUrl = "~/images/placeholders/airline.png"
+                    ImageUrl = Url.Content("~/images/placeholders/hotel.png")
                 };
 
                 if (vendor.VendorID != 0)
@@ -469,12 +544,25 @@ namespace CoreTripRex.Controllers.DashboardControllers
                         {
                             vendor.Rooms.Add(new RoomOptionVM
                             {
-                                ID = r.Table.Columns.Contains("id") ? Convert.ToInt32(r["id"]) : 0,
-                                RoomType = r.Table.Columns.Contains("room_type") ? r["room_type"].ToString() : "Room",
-                                MaxOccupancy = r.Table.Columns.Contains("max_occupancy") && r["max_occupancy"] != DBNull.Value ? Convert.ToString(r["max_occupancy"]) : "2",
-                                PricePerNight = r.Table.Columns.Contains("base_price") && r["base_price"] != DBNull.Value ? Convert.ToDecimal(r["base_price"]) : 0m,
-                                ImageUrl = "~/images/placeholders/airline.png"
+                                ID = r.Table.Columns.Contains("room_type_id")
+                                ? Convert.ToInt32(r["room_type_id"])
+                                : 0,
+
+                                RoomType = r.Table.Columns.Contains("room_type")
+                                ? r["room_type"].ToString()
+                                : "Room",
+
+                                MaxOccupancy = r.Table.Columns.Contains("max_occupancy")
+                                ? r["max_occupancy"].ToString()
+                                : "2",
+
+                                PricePerNight = r.Table.Columns.Contains("price") && r["price"] != DBNull.Value
+                                ? Convert.ToDecimal(r["price"])
+                                : 0m,
+
+                                ImageUrl = Url.Content("~/images/placeholders/hotel.png")
                             });
+
                         }
                     }
                 }
@@ -506,7 +594,7 @@ namespace CoreTripRex.Controllers.DashboardControllers
                         VendorID = row.Table.Columns.Contains("vendor_id") ? Convert.ToInt32(row["vendor_id"]) : 0,
                         StartingPrice = row.Table.Columns.Contains("daily_rate") && row["daily_rate"] != DBNull.Value ? Convert.ToDecimal(row["daily_rate"]) : 0m,
                         Caption = "Economy to SUV options available.",
-                        ImageUrl = "~/images/placeholders/car.png"
+                        ImageUrl = Url.Content("~/images/placeholders/car.png")
                     };
 
                     vendorsByAgency[agency] = vendor;
@@ -521,7 +609,7 @@ namespace CoreTripRex.Controllers.DashboardControllers
                     CarClass = row.Table.Columns.Contains("car_class") ? row["car_class"].ToString() : string.Empty,
                     Seats = row.Table.Columns.Contains("seats") && row["seats"] != DBNull.Value ? Convert.ToInt32(row["seats"]) : 0,
                     DailyRate = row.Table.Columns.Contains("daily_rate") && row["daily_rate"] != DBNull.Value ? Convert.ToDecimal(row["daily_rate"]) : 0m,
-                    ImageUrl = "~/images/placeholders/car.png"
+                    ImageUrl = Url.Content("~/images/placeholders/car.png")
                 });
             }
 
@@ -549,7 +637,7 @@ namespace CoreTripRex.Controllers.DashboardControllers
                     {
                         Organizer = organizer,
                         Venue = venue,
-                        ImageUrl = "~/images/placeholders/event.png",
+                        ImageUrl = Url.Content("~/images/placeholders/event.png"),
                         Caption = "Exciting events happening during your stay."
                     };
 
@@ -572,58 +660,80 @@ namespace CoreTripRex.Controllers.DashboardControllers
         private CartVM LoadCartVm(int userId, DashboardViewModel model)
         {
             var cart = new CartVM();
+            decimal total = 0m;
 
             int packageId = sp.PackageGetOrCreate(userId);
             DataSet ds = sp.PackageGet(packageId);
 
-            if (ds == null || ds.Tables.Count <= 1 || ds.Tables[1].Rows.Count == 0)
+            if (ds != null && ds.Tables.Count > 1 && ds.Tables[1].Rows.Count > 0)
             {
-                model.ShowCart = false;
-                return cart;
+                DataTable items = ds.Tables[1];
+
+                DateTime tripStart;
+                DateTime tripEnd;
+
+                var tripStartStr = HttpContext.Session.GetString("TripStart");
+                var tripEndStr = HttpContext.Session.GetString("TripEnd");
+
+                if (!DateTime.TryParse(tripStartStr, out tripStart))
+                    tripStart = DateTime.UtcNow;
+
+                if (!DateTime.TryParse(tripEndStr, out tripEnd))
+                    tripEnd = tripStart.AddDays(1);
+
+                int totalDays = (tripEnd - tripStart).Days;
+                if (totalDays < 1) totalDays = 1;
+
+                foreach (DataRow r in items.Rows)
+                {
+                    string type = r["service_type"].ToString();
+
+                    decimal unitPrice = r["unit_price"] != DBNull.Value ? Convert.ToDecimal(r["unit_price"]) : 0m;
+
+                    decimal lineTotal;
+                    if (type == "Hotel" || type == "Car Rental")
+                        lineTotal = unitPrice * totalDays;
+                    else
+                        lineTotal = r["line_total"] != DBNull.Value ? Convert.ToDecimal(r["line_total"]) : unitPrice;
+
+                    total += lineTotal;
+
+                    cart.Items.Add(new CartItemVM
+                    {
+                        ServiceType = type,
+                        DisplayName = r.Table.Columns.Contains("display_name") ? r["display_name"].ToString() : string.Empty,
+                        Details = r.Table.Columns.Contains("details") ? r["details"].ToString() : string.Empty,
+                        RefId = r.Table.Columns.Contains("ref_id") ? r["ref_id"].ToString() : string.Empty,
+                        ItemPrice = unitPrice,
+                        Quantity = (type == "Hotel" || type == "Car Rental")
+                            ? totalDays
+                            : (r.Table.Columns.Contains("qty") && r["qty"] != DBNull.Value ? Convert.ToInt32(r["qty"]) : 1),
+                        ComputedPrice = lineTotal
+                    });
+                }
             }
 
-            DataTable items = ds.Tables[1];
-            decimal total = 0m;
-
-            DateTime tripStart;
-            DateTime tripEnd;
-
-            var tripStartStr = HttpContext.Session.GetString("TripStart");
-            var tripEndStr = HttpContext.Session.GetString("TripEnd");
-
-            if (!DateTime.TryParse(tripStartStr, out tripStart))
-                tripStart = DateTime.UtcNow;
-
-            if (!DateTime.TryParse(tripEndStr, out tripEnd))
-                tripEnd = tripStart.AddDays(1);
-
-            int totalDays = (tripEnd - tripStart).Days;
-            if (totalDays < 1) totalDays = 1;
-
-            foreach (DataRow r in items.Rows)
+            var apiJson = HttpContext.Session.GetString("ApiCarSelections");
+            if (!string.IsNullOrEmpty(apiJson))
             {
-                string type = r["service_type"].ToString();
+                var apiCars = JsonSerializer.Deserialize<List<CarSelection>>(apiJson) ?? new List<CarSelection>();
 
-                decimal unitPrice = r["unit_price"] != DBNull.Value ? Convert.ToDecimal(r["unit_price"]) : 0m;
-
-                decimal lineTotal;
-                if (type == "Hotel" || type == "Car Rental")
-                    lineTotal = unitPrice * totalDays;
-                else
-                    lineTotal = r["line_total"] != DBNull.Value ? Convert.ToDecimal(r["line_total"]) : unitPrice;
-
-                total += lineTotal;
-
-                cart.Items.Add(new CartItemVM
+                foreach (var car in apiCars)
                 {
-                    ServiceType = type,
-                    DisplayName = r.Table.Columns.Contains("display_name") ? r["display_name"].ToString() : string.Empty,
-                    Details = r.Table.Columns.Contains("details") ? r["details"].ToString() : string.Empty,
-                    RefId = r.Table.Columns.Contains("ref_id") ? r["ref_id"].ToString() : string.Empty,
-                    ItemPrice = unitPrice,
-                    Quantity = (type == "Hotel" || type == "Car Rental") ? totalDays : (r.Table.Columns.Contains("qty") && r["qty"] != DBNull.Value ? Convert.ToInt32(r["qty"]) : 1),
-                    ComputedPrice = lineTotal
-                });
+                    decimal lineTotal = car.DailyRate * car.Quantity;
+                    total += lineTotal;
+
+                    cart.Items.Add(new CartItemVM
+                    {
+                        ServiceType = "Car Rental",
+                        DisplayName = car.Agency,
+                        Details = $"{car.Model} ({car.CarClass}, {car.Seats} seats)",
+                        RefId = car.CarId.ToString(),
+                        ItemPrice = car.DailyRate,
+                        Quantity = car.Quantity,
+                        ComputedPrice = lineTotal
+                    });
+                }
             }
 
             cart.Total = total;
@@ -631,5 +741,22 @@ namespace CoreTripRex.Controllers.DashboardControllers
 
             return cart;
         }
+
+        private string ResolveState(string city)
+        {
+            if (string.IsNullOrWhiteSpace(city))
+                return "NA";
+
+            city = city.Trim().ToLower();
+
+            return city switch
+            {
+                "philadelphia" => "PA",
+                "las vegas" => "NV",
+                "orlando" => "FL",
+                _ => "NA"
+            };
+        }
+
     }
 }

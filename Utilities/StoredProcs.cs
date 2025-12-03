@@ -87,6 +87,36 @@ namespace Utilities
             DataSet ds = db.GetDataSet(sql);
             return ds;
         }
+        public int ApiRentalCarInsert(int apiCarId, string vendorName, string model,
+                              string carClass, int seats, decimal dailyRate,
+                              string imageUrl)
+        {
+            SqlCommand cmd = new SqlCommand
+            {
+                CommandType = CommandType.StoredProcedure,
+                CommandText = "usp_ApiRentalCar_Insert"
+            };
+
+            cmd.Parameters.AddWithValue("@api_car_id", apiCarId);
+            cmd.Parameters.AddWithValue("@vendor_name", vendorName ?? string.Empty);
+            cmd.Parameters.AddWithValue("@model", model ?? string.Empty);
+            cmd.Parameters.AddWithValue("@car_class", carClass ?? string.Empty);
+            cmd.Parameters.AddWithValue("@seats", seats);
+            cmd.Parameters.AddWithValue("@daily_rate", dailyRate);
+            cmd.Parameters.AddWithValue("@image_url", (object)imageUrl ?? DBNull.Value);
+
+            var outParam = new SqlParameter("@new_id", SqlDbType.Int)
+            {
+                Direction = ParameterDirection.Output
+            };
+            cmd.Parameters.Add(outParam);
+
+            DBConnect db = new DBConnect();
+            db.DoUpdateUsingCmdObj(cmd);
+
+            return (int)outParam.Value;
+        }
+
 
         //event procedures
         public DataSet EventDetails(int eventId)

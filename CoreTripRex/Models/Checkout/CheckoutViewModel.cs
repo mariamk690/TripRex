@@ -59,6 +59,8 @@ namespace CoreTripRex.Models.Checkout
         private string _exp;
 
         private bool _isSuccess;
+        public bool HasSavedCard { get; set; }
+        public string? SavedCardLabel { get; set; }
 
         public string UserGreeting
         {

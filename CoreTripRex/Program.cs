@@ -1,5 +1,6 @@
 using CoreTripRex.Data;
 using CoreTripRex.Models;
+using CoreTripRex.Services;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.SqlServer;
@@ -12,6 +13,7 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
         builder.Configuration.GetConnectionString("DefaultConnection")
     )
 );
+builder.Services.AddHttpClient<CarApiService>();
 
 // ------------------- IDENTITY -------------------
 builder.Services.AddIdentity<AppUser, IdentityRole>(options =>
@@ -28,7 +30,6 @@ builder.Services.AddIdentity<AppUser, IdentityRole>(options =>
 .AddEntityFrameworkStores<ApplicationDbContext>()
 .AddDefaultTokenProviders();
 
-// Disable Identity auto-refresh that causes “auto-login”
 builder.Services.Configure<SecurityStampValidatorOptions>(options =>
 {
     options.ValidationInterval = TimeSpan.Zero;
