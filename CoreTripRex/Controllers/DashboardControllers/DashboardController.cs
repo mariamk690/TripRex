@@ -1,5 +1,6 @@
 ﻿using CoreTripRex.Models;
 using CoreTripRex.Models.Dashboard;
+using CoreTripRex.Services;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using System;
@@ -16,10 +17,11 @@ namespace CoreTripRex.Controllers.DashboardControllers
         private readonly StoredProcs sp = new StoredProcs();
         private readonly UserManager<AppUser> _userManager;
         private static readonly Random rand = new Random();
-
-        public DashboardController(UserManager<AppUser> userManager)
+        private readonly CarApiService _carApi;
+        public DashboardController(UserManager<AppUser> userManager, CarApiService carApi)
         {
             _userManager = userManager;
+            _carApi = carApi;
         }
 
         [HttpGet]
@@ -105,6 +107,7 @@ namespace CoreTripRex.Controllers.DashboardControllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
+
         public async Task<IActionResult> Search(DashboardViewModel model)
         {
             model.ErrorMessage = null;
@@ -112,8 +115,13 @@ namespace CoreTripRex.Controllers.DashboardControllers
 
             try
             {
-                if (!model.StartDate.HasValue || !model.EndDate.HasValue) throw new Exception("Enter valid start and end date.");
-                if (string.IsNullOrWhiteSpace(model.Origin) || string.IsNullOrWhiteSpace(model.Destination)) throw new Exception("Fill in both location fields.");
+                if (!model.StartDate.HasValue || !model.EndDate.HasValue)
+                    throw new Exception("Enter valid start and end date.");
+                if (string.IsNullOrWhiteSpace(model.Origin) || string.IsNullOrWhiteSpace(model.Destination))
+                    throw new Exception("Fill in both location fields.");
+
+                model.Origin = model.Origin.Trim();
+                model.Destination = model.Destination.Trim();
 
                 DateTime startDate = model.StartDate.Value;
                 DateTime endDate = model.EndDate.Value;
@@ -128,8 +136,6 @@ namespace CoreTripRex.Controllers.DashboardControllers
 
                 var identityUser = await _userManager.GetUserAsync(User);
                 int? userId = identityUser?.LegacyUserId > 0 ? identityUser.LegacyUserId : (int?)null;
-
-                if (userId.HasValue) TryLoadSavedSearch(userId.Value, model);
 
                 if (model.IncludeFlights)
                 {
@@ -146,7 +152,7 @@ namespace CoreTripRex.Controllers.DashboardControllers
                 }
                 else model.ShowFlights = false;
 
-                if (model.IncludeCars)
+                if (model.IncludeHotels)
                 {
                     try
                     {
@@ -166,19 +172,57 @@ namespace CoreTripRex.Controllers.DashboardControllers
                 {
                     try
                     {
-                        var dsCars = sp.CarsSearch(destCityId);
-                        model.CarVendors = LoadCarsVm(dsCars);
-                        model.ShowCars = model.CarVendors.Count > 0;
+                        string city = model.Destination;
+                        string state = ResolveState(city);
+
+                        var agencies = await _carApi.GetAgencies(city, state);
+
+                        var carVendors = new List<CarVendorVM>();
+
+                        foreach (var agency in agencies)
+                        {
+                            var cars = await _carApi.GetCars(agency.AgencyID, city, state);
+
+                            var vendor = new CarVendorVM
+                            {
+                                VendorID = agency.AgencyID,
+                                Agency = agency.AgencyName,
+                                Caption = "Available rental vehicles",
+                                StartingPrice = cars.Any() ? (decimal)cars.Min(c => c.DailyRate) : 0m,
+                                ImageUrl = "~/images/placeholders/car.png"
+                            };
+
+                            foreach (var car in cars)
+                            {
+                                vendor.Cars.Add(new CarOptionVM
+                                {
+                                    ID = car.CarID,
+                                    Make = car.CompanyName,
+                                    Model = car.CarModel,
+                                    CarClass = car.CarType,
+                                    Seats = car.Seats,
+                                    DailyRate = (decimal)car.DailyRate,
+                                    ImageUrl = string.IsNullOrWhiteSpace(car.ImageURL)
+                                        ? "~/images/placeholders/car.png"
+                                        : car.ImageURL
+                                });
+                            }
+
+                            carVendors.Add(vendor);
+                        }
+
+                        model.CarVendors = carVendors;
+                        model.ShowCars = carVendors.Any();
                     }
                     catch (Exception ex)
                     {
-                        model.ErrorMessage = "Car error: " + ex.Message;
+                        model.ErrorMessage = "Car API error: " + ex.Message;
                         model.ShowCars = false;
                     }
                 }
                 else model.ShowCars = false;
 
-                if (model.IncludeCars)
+                if (model.IncludeEvents)
                 {
                     try
                     {
@@ -209,6 +253,10 @@ namespace CoreTripRex.Controllers.DashboardControllers
                 return View("Index", model);
             }
         }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public IActionResult AddCar(int carId) => AddToPackage("Car Rental", carId);
 
         [HttpPost]
         [ValidateAntiForgeryToken]
@@ -631,5 +679,21 @@ namespace CoreTripRex.Controllers.DashboardControllers
 
             return cart;
         }
+        private string ResolveState(string city)
+        {
+            if (string.IsNullOrWhiteSpace(city))
+                return "NA";
+
+            city = city.Trim().ToLower();
+
+            return city switch
+            {
+                "philadelphia" => "PA",
+                "las vegas" => "NV",
+                "orlando" => "FL",
+                _ => "NA"
+            };
+        }
+
     }
 }

@@ -92,9 +92,9 @@ namespace CoreTripRex.Controllers
                 {
                     list.Add(new TripPackage
                     {
-                        Title = dr["title"] == DBNull.Value ? "" : dr["title"].ToString(),
-                        StartDate = dr["start_date"] == DBNull.Value ? "" : dr["start_date"].ToString(),
-                        EndDate = dr["end_date"] == DBNull.Value ? "" : dr["end_date"].ToString()
+                        Title = dr["destination"]?.ToString() ?? "Unknown",  
+                        StartDate = dr["trip_start"]?.ToString() ?? "",
+                        EndDate = dr["trip_end"]?.ToString() ?? ""
                     });
                 }
             }
