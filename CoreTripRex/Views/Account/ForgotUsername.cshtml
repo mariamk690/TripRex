@@ -1,0 +1,73 @@
+﻿@model CoreTripRex.Models.RegisterSignInVM.ForgotUsernameVM
+@{
+    ViewData["Title"] = "Find Your Username";
+}
+
+<div class="container py-4">
+    <div class="card p-4 mx-auto" style="max-width: 500px;">
+        <h3 class="mb-3">Forgot Username</h3>
+        @if (!ViewData.ModelState.IsValid)
+        {
+            <div class="alert alert-danger">
+                @foreach (var error in ViewData.ModelState.Values.SelectMany(v => v.Errors))
+                {
+                    <div>@error.ErrorMessage</div>
+                }
+            </div>
+        }
+
+        @if (!Model.ShowQuestion && !Model.ShowResult)
+        {
+            <form method="post" asp-action="ForgotUsername" autocomplete="off">
+                @Html.AntiForgeryToken()
+                <div class="mb-3">
+                    <label class="form-label">Full Name</label>
+                    <input asp-for="FullName" class="form-control" />
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Phone</label>
+                    <input asp-for="Phone" class="form-control" />
+                </div>
+
+                <button class="btn btn-primary w-100">Continue</button>
+            </form>
+        }
+
+        <!-- STEP 2: Security Question -->
+        @if (Model.ShowQuestion && !Model.ShowResult)
+        {
+            <form method="post" autocomplete="off">
+                @Html.AntiForgeryToken()
+                <input type="hidden" asp-for="FullName" />
+                <input type="hidden" asp-for="Phone" />
+                <input type="hidden" asp-for="Question" />
+                <input type="hidden" asp-for="ShowQuestion" value="true" />
+
+                <div class="mb-3">
+                    <label class="form-label">Security Question</label>
+                    <input asp-for="Question" class="form-control" readonly />
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Your Answer</label>
+                    <input asp-for="Answer" class="form-control" />
+                </div>
+
+                <button class="btn btn-success w-100">Verify Answer</button>
+            </form>
+        }
+
+
+        <!-- STEP 3: Show Email -->
+        @if (Model.ShowResult)
+        {
+            <div class="alert alert-success mt-2">
+                <strong>Your username is:</strong><br />
+                @Model.EmailResult
+            </div>
+        }
+
+        <a asp-action="Login" class="mt-3 d-block">Back to Login</a>
+    </div>
+</div>
