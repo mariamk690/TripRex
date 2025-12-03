@@ -49,6 +49,17 @@
             </tfoot>
         </table>
 
+        @if (!string.IsNullOrWhiteSpace(Model.ChartImageUrl))
+        {
+            <div class="mt-4">
+                <h5>Cost breakdown by service</h5>
+                <img src="@Model.ChartImageUrl"
+                     alt="Cost breakdown chart"
+                     class="img-fluid" />
+            </div>
+        }
+
+
         <form asp-action="Index" method="post" class="mt-4">
             <div class="mb-3">
                 <label class="form-label">

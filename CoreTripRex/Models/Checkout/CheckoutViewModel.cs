@@ -1,5 +1,6 @@
-﻿using System;
+﻿using ScottPlot;
 using System.Collections.Generic;
+using System;
 
 namespace CoreTripRex.Models.Checkout
 {
@@ -10,6 +11,7 @@ namespace CoreTripRex.Models.Checkout
         private decimal _computedTotal;
         private string _computedDates;
         private string _computedQtyLabel;
+
 
         public string DisplayName
         {
@@ -51,7 +53,7 @@ namespace CoreTripRex.Models.Checkout
 
         private List<CheckoutItemViewModel> _items;
         private decimal _total;
-
+        private string _chartImageUrl;
         private bool _addCard;
         private string _cardNumber;
         private string _exp;
@@ -92,6 +94,11 @@ namespace CoreTripRex.Models.Checkout
         {
             get { return _total; }
             set { _total = value; }
+        }
+        public string ChartImageUrl
+        {
+            get { return _chartImageUrl; }
+            set { _chartImageUrl = value; }
         }
 
         public bool AddCard
