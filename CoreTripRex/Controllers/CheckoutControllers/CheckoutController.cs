@@ -364,21 +364,38 @@ namespace CoreTripRex.Controllers
 
                 Plot plt = new Plot();
 
-                List<PieSlice> slices = new List<PieSlice>();
-                int i = 0;
-                while (i < count)
+                ScottPlot.Plottables.Pie pie = plt.Add.Pie(values);
+                pie.ExplodeFraction = 0.05;
+                pie.SliceLabelDistance = 0.5;
+
+                double totalValue = 0;
+                int j = 0;
+                while (j < count)
                 {
-                    PieSlice slice = new PieSlice();
-                    slice.Value = values[i];
-                    slice.Label = labels[i];
-                    slices.Add(slice);
-                    i = i + 1;
+                    totalValue = totalValue + values[j];
+                    j = j + 1;
                 }
 
-                ScottPlot.Plottables.Pie pie = plt.Add.Pie(slices);
-                pie.SliceLabelDistance = 0.5;
-                pie.ExplodeFraction = 0.05;
+                int k = 0;
+                while (k < count)
+                {
+                    double percent = 0;
+                    if (totalValue > 0)
+                    {
+                        percent = values[k] / totalValue * 100.0;
+                    }
 
+                    pie.Slices[k].Label = labels[k];
+                    pie.Slices[k].LabelFontSize = 14;
+                    pie.Slices[k].LabelBold = true;
+                    pie.Slices[k].LabelFontColor = Colors.Black.WithAlpha(0.7f);
+                    pie.Slices[k].LegendText =
+                        labels[k] + " $" + values[k].ToString("0") + " (" + percent.ToString("0") + "%)";
+
+                    k = k + 1;
+                }
+
+                plt.ShowLegend();
                 plt.Axes.Frameless();
                 plt.HideGrid();
 
@@ -386,6 +403,7 @@ namespace CoreTripRex.Controllers
                 string base64 = Convert.ToBase64String(bytes);
                 model.ChartImageUrl = "data:image/png;base64," + base64;
             }
+
 
             model.Items = list;
             model.Total = total;
