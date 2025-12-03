@@ -90,12 +90,46 @@ namespace CoreTripRex.Controllers
             {
                 foreach (DataRow dr in ds.Tables[0].Rows)
                 {
-                    list.Add(new TripPackage
+                    var pkg = new TripPackage
                     {
-                        Title = dr["destination"]?.ToString() ?? "Unknown",  
-                        StartDate = dr["trip_start"]?.ToString() ?? "",
-                        EndDate = dr["trip_end"]?.ToString() ?? ""
-                    });
+                        Id = dr["id"] == DBNull.Value ? 0 : Convert.ToInt32(dr["id"]),
+                        Title = dr["destination"] == DBNull.Value ? "Unknown" : dr["destination"].ToString(),
+                        StartDate = dr["trip_start"] == DBNull.Value
+                            ? ""
+                            : Convert.ToDateTime(dr["trip_start"]).ToString("MM/dd/yyyy"),
+                        EndDate = dr["trip_end"] == DBNull.Value
+                            ? ""
+                            : Convert.ToDateTime(dr["trip_end"]).ToString("MM/dd/yyyy"),
+                        Items = new List<TripItem>()
+                    };
+
+                    list.Add(pkg);
+                }
+            }
+
+            if (ds.Tables.Count > 1 && list.Count > 0)
+            {
+                var lookup = list.ToDictionary(p => p.Id);
+
+                foreach (DataRow dr in ds.Tables[1].Rows)
+                {
+                    int packageId = dr["package_id"] == DBNull.Value ? 0 : Convert.ToInt32(dr["package_id"]);
+                    if (!lookup.ContainsKey(packageId))
+                        continue;
+
+                    var item = new TripItem
+                    {
+                        Type = dr["service_type"] == DBNull.Value ? "" : dr["service_type"].ToString(),
+                        Name = dr["item_name"] == DBNull.Value ? "" : dr["item_name"].ToString(),
+                        StartDate = dr["start_utc"] == DBNull.Value
+                            ? ""
+                            : Convert.ToDateTime(dr["start_utc"]).ToString("MM/dd/yyyy"),
+                        EndDate = dr["end_utc"] == DBNull.Value
+                            ? ""
+                            : Convert.ToDateTime(dr["end_utc"]).ToString("MM/dd/yyyy")
+                    };
+
+                    lookup[packageId].Items.Add(item);
                 }
             }
 

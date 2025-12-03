@@ -316,8 +316,16 @@
 
 																	<form method="post" asp-action="AddCar">
 																		<input type="hidden" name="carId" value="@car.ID" />
+																		<input type="hidden" name="agency" value="@c.Agency" />
+																		<input type="hidden" name="model" value="@car.Model" />
+																		<input type="hidden" name="carClass" value="@car.CarClass" />
+																		<input type="hidden" name="seats" value="@car.Seats" />
+																		<input type="hidden" name="dailyRate" value="@car.DailyRate" />
+																		<input type="hidden" name="imageUrl" value="@car.ImageUrl" />
 																		<button type="submit" class="btn btn-success btn-sm w-100">Add</button>
 																	</form>
+
+
 																</div>
 															</div>
 														}

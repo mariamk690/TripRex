@@ -55,10 +55,14 @@
                     <input type="radio" name="AddCard" value="true" @(Model.AddCard ? "checked" : "") />
                     Use a new card
                 </label>
-                <label class="form-label ms-3">
-                    <input type="radio" name="AddCard" value="false" @(Model.AddCard ? "" : "checked") />
-                    Use my saved card
-                </label>
+
+                @if (Model.HasSavedCard)
+                {
+                    <label class="form-label ms-3">
+                        <input type="radio" name="AddCard" value="false" @(!Model.AddCard ? "checked" : "") />
+                        Use my saved card (@Model.SavedCardLabel)
+                    </label>
+                }
             </div>
 
             <div id="new-card-fields" class="border rounded p-3 mb-3">
@@ -78,3 +82,24 @@
         </form>
     }
 </div>
+
+@section Scripts {
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const radios = document.querySelectorAll('input[name="AddCard"]');
+            const newCardFields = document.getElementById('new-card-fields');
+
+            function updateVisibility() {
+                const selected = document.querySelector('input[name="AddCard"]:checked');
+                if (selected && selected.value === 'true') {
+                    newCardFields.classList.remove('d-none');
+                } else {
+                    newCardFields.classList.add('d-none');
+                }
+            }
+
+            radios.forEach(r => r.addEventListener('change', updateVisibility));
+            updateVisibility();
+        });
+    </script>
+}
