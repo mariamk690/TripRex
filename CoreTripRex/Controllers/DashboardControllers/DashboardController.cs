@@ -42,7 +42,7 @@ namespace CoreTripRex.Controllers.DashboardControllers
             {
                 model.ShowResumeButton = true;
                 model.StatusMessage = "Welcome back! You can resume your previous session.";
-                TrySaveSearch(userId.Value, model);
+                TryLoadSavedSearch(userId.Value, model);
                 model.Cart = LoadCartVm(userId.Value, model);
             }
             else
@@ -85,7 +85,7 @@ namespace CoreTripRex.Controllers.DashboardControllers
                     packageId,
                     "Flight",
                     flightId,
-                    quantity, 
+                    quantity,
                     null,
                     null
                 );
@@ -189,7 +189,7 @@ namespace CoreTripRex.Controllers.DashboardControllers
                                 Agency = agency.AgencyName,
                                 Caption = "Available rental vehicles",
                                 StartingPrice = cars.Any() ? (decimal)cars.Min(c => c.DailyRate) : 0m,
-                                ImageUrl = "~/images/placeholders/car.png"
+                                ImageUrl = Url.Content("~/images/placeholders/car.png")
                             };
 
                             foreach (var car in cars)
@@ -240,6 +240,7 @@ namespace CoreTripRex.Controllers.DashboardControllers
 
                 if (userId.HasValue)
                 {
+                    TrySaveSearch(userId.Value, model);
                     model.Cart = LoadCartVm(userId.Value, model);
                     model.ShowCart = model.Cart != null && model.Cart.Items.Count > 0;
                 }
@@ -505,7 +506,7 @@ namespace CoreTripRex.Controllers.DashboardControllers
                     Email = h.Table.Columns.Contains("email") ? h["email"].ToString() : string.Empty,
                     Caption = h.Table.Columns.Contains("caption") && h["caption"] != DBNull.Value ? h["caption"].ToString() : "Comfort and style near your destination",
                     StartingPrice = h.Table.Columns.Contains("starting_price") && h["starting_price"] != DBNull.Value ? Convert.ToDecimal(h["starting_price"]) : 0m,
-                    ImageUrl = "~/images/placeholders/airline.png"
+                    ImageUrl = Url.Content("~/images/placeholders/hotel.png")
                 };
 
                 if (vendor.VendorID != 0)
@@ -517,12 +518,25 @@ namespace CoreTripRex.Controllers.DashboardControllers
                         {
                             vendor.Rooms.Add(new RoomOptionVM
                             {
-                                ID = r.Table.Columns.Contains("id") ? Convert.ToInt32(r["id"]) : 0,
-                                RoomType = r.Table.Columns.Contains("room_type") ? r["room_type"].ToString() : "Room",
-                                MaxOccupancy = r.Table.Columns.Contains("max_occupancy") && r["max_occupancy"] != DBNull.Value ? Convert.ToString(r["max_occupancy"]) : "2",
-                                PricePerNight = r.Table.Columns.Contains("base_price") && r["base_price"] != DBNull.Value ? Convert.ToDecimal(r["base_price"]) : 0m,
-                                ImageUrl = "~/images/placeholders/airline.png"
+                                ID = r.Table.Columns.Contains("room_type_id")
+                                ? Convert.ToInt32(r["room_type_id"])
+                                : 0,
+
+                                RoomType = r.Table.Columns.Contains("room_type")
+                                ? r["room_type"].ToString()
+                                : "Room",
+
+                                MaxOccupancy = r.Table.Columns.Contains("max_occupancy")
+                                ? r["max_occupancy"].ToString()
+                                : "2",
+
+                                PricePerNight = r.Table.Columns.Contains("price") && r["price"] != DBNull.Value
+                                ? Convert.ToDecimal(r["price"])
+                                : 0m,
+
+                                ImageUrl = Url.Content("~/images/placeholders/hotel.png")
                             });
+
                         }
                     }
                 }
@@ -554,7 +568,7 @@ namespace CoreTripRex.Controllers.DashboardControllers
                         VendorID = row.Table.Columns.Contains("vendor_id") ? Convert.ToInt32(row["vendor_id"]) : 0,
                         StartingPrice = row.Table.Columns.Contains("daily_rate") && row["daily_rate"] != DBNull.Value ? Convert.ToDecimal(row["daily_rate"]) : 0m,
                         Caption = "Economy to SUV options available.",
-                        ImageUrl = "~/images/placeholders/car.png"
+                        ImageUrl = Url.Content("~/images/placeholders/car.png")
                     };
 
                     vendorsByAgency[agency] = vendor;
@@ -569,7 +583,7 @@ namespace CoreTripRex.Controllers.DashboardControllers
                     CarClass = row.Table.Columns.Contains("car_class") ? row["car_class"].ToString() : string.Empty,
                     Seats = row.Table.Columns.Contains("seats") && row["seats"] != DBNull.Value ? Convert.ToInt32(row["seats"]) : 0,
                     DailyRate = row.Table.Columns.Contains("daily_rate") && row["daily_rate"] != DBNull.Value ? Convert.ToDecimal(row["daily_rate"]) : 0m,
-                    ImageUrl = "~/images/placeholders/car.png"
+                    ImageUrl = Url.Content("~/images/placeholders/car.png")
                 });
             }
 
@@ -597,7 +611,7 @@ namespace CoreTripRex.Controllers.DashboardControllers
                     {
                         Organizer = organizer,
                         Venue = venue,
-                        ImageUrl = "~/images/placeholders/event.png",
+                        ImageUrl = Url.Content("~/images/placeholders/event.png"),
                         Caption = "Exciting events happening during your stay."
                     };
 
