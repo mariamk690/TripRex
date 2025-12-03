@@ -1,11 +1,12 @@
-﻿using CoreTripRex.Models.Checkout;
+﻿using CoreTripRex.Models;
+using CoreTripRex.Models.Checkout;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using ScottPlot;
 using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Threading.Tasks;
-using CoreTripRex.Models;
 using TripRexLibraries;
 using Utilities;
 
@@ -329,10 +330,86 @@ namespace CoreTripRex.Controllers
                 });
             }
 
+            Dictionary<string, decimal> totalsByType = new Dictionary<string, decimal>();
+
+            foreach (CheckoutItemViewModel item in list)
+            {
+                string typeKey = item.ServiceType;
+                if (typeKey == null)
+                {
+                    typeKey = string.Empty;
+                }
+
+                if (!totalsByType.ContainsKey(typeKey))
+                {
+                    totalsByType[typeKey] = 0m;
+                }
+
+                totalsByType[typeKey] = totalsByType[typeKey] + item.ComputedTotal;
+            }
+
+            if (totalsByType.Count > 0)
+            {
+                int count = totalsByType.Count;
+                string[] labels = new string[count];
+                double[] values = new double[count];
+
+                int index = 0;
+                foreach (KeyValuePair<string, decimal> kvp in totalsByType)
+                {
+                    labels[index] = kvp.Key;
+                    values[index] = Convert.ToDouble(kvp.Value);
+                    index = index + 1;
+                }
+
+                Plot plt = new Plot();
+
+                ScottPlot.Plottables.Pie pie = plt.Add.Pie(values);
+                pie.ExplodeFraction = 0.05;
+                pie.SliceLabelDistance = 0.5;
+
+                double totalValue = 0;
+                int j = 0;
+                while (j < count)
+                {
+                    totalValue = totalValue + values[j];
+                    j = j + 1;
+                }
+
+                int k = 0;
+                while (k < count)
+                {
+                    double percent = 0;
+                    if (totalValue > 0)
+                    {
+                        percent = values[k] / totalValue * 100.0;
+                    }
+
+                    pie.Slices[k].Label = labels[k];
+                    pie.Slices[k].LabelFontSize = 14;
+                    pie.Slices[k].LabelBold = true;
+                    pie.Slices[k].LabelFontColor = Colors.Black.WithAlpha(0.7f);
+                    pie.Slices[k].LegendText =
+                        labels[k] + " $" + values[k].ToString("0") + " (" + percent.ToString("0") + "%)";
+
+                    k = k + 1;
+                }
+
+                plt.ShowLegend();
+                plt.Axes.Frameless();
+                plt.HideGrid();
+
+                byte[] bytes = plt.GetImageBytes(600, 400, ScottPlot.ImageFormat.Png);
+                string base64 = Convert.ToBase64String(bytes);
+                model.ChartImageUrl = "data:image/png;base64," + base64;
+            }
+
+
             model.Items = list;
             model.Total = total;
 
             return model;
+
         }
     }
 }
