@@ -54,6 +54,7 @@ namespace CoreTripRex.Models.Checkout
         private List<CheckoutItemViewModel> _items;
         private decimal _total;
         private string _chartImageUrl;
+        private string _mapImageUrl;
         private bool _addCard;
         private string _cardNumber;
         private string _exp;
@@ -102,6 +103,12 @@ namespace CoreTripRex.Models.Checkout
             get { return _chartImageUrl; }
             set { _chartImageUrl = value; }
         }
+        public string MapImageUrl
+        {
+            get { return _mapImageUrl; }
+            set { _mapImageUrl = value; }
+        }
+
 
         public bool AddCard
         {

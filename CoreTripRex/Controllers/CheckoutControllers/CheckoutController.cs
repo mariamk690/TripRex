@@ -1,15 +1,22 @@
 ﻿using CoreTripRex.Models;
 using CoreTripRex.Models.Checkout;
+using CoreTripRex.Services;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 using ScottPlot;
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Net;
 using System.Threading.Tasks;
 using TripRexLibraries;
 using Utilities;
-using CoreTripRex.Services;
+using System.Data.SqlClient;
+using System.Text;
+using System.Text.Json;
+
+
 
 namespace CoreTripRex.Controllers
 {
@@ -18,13 +25,25 @@ namespace CoreTripRex.Controllers
         private readonly StoredProcs _sp;
         private readonly UserManager<AppUser> _userManager;
         private readonly IEmailService _emailService;
+        private readonly IConfiguration _configuration;
 
-        public CheckoutController(UserManager<AppUser> userManager, IEmailService emailService)
+
+        public CheckoutController(UserManager<AppUser> userManager, IEmailService emailService, IConfiguration configuration)
         {
             _sp = new StoredProcs();
             _userManager = userManager;
             _emailService = emailService;
+            _configuration = configuration;
         }
+        private static readonly Dictionary<string, string> CityCoordinates =
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                { "Philadelphia", "39.9526,-75.1652" },
+                { "Las Vegas", "36.1699,-115.1398" },
+                { "Orlando", "28.5383,-81.3792" }
+            };
+
+
 
         [HttpGet]
         public async Task<IActionResult> Index()
@@ -248,6 +267,7 @@ namespace CoreTripRex.Controllers
 
         private async Task<CheckoutViewModel> LoadCheckoutViewModel()
         {
+
             var model = new CheckoutViewModel();
 
             var user = await _userManager.GetUserAsync(User);
@@ -412,11 +432,42 @@ namespace CoreTripRex.Controllers
                 byte[] bytes = plt.GetImageBytes(600, 400, ScottPlot.ImageFormat.Png);
                 string base64 = Convert.ToBase64String(bytes);
                 model.ChartImageUrl = "data:image/png;base64," + base64;
+
+
+            }
+
+            //google maps api
+            string mapKey = _configuration["GoogleMaps:ApiKey"];
+            if (!string.IsNullOrWhiteSpace(mapKey))
+            {
+                string baseUrl = "https://maps.googleapis.com/maps/api/staticmap";
+
+                string origin = "39.9526,-75.1652";
+                string destination = "25.7617,-80.1918";
+
+                List<string> markerSegments = new List<string>();
+                markerSegments.Add("markers=color:blue|label:H|25.7906,-80.1300");
+                markerSegments.Add("markers=color:red|label:E|25.7743,-80.1937");
+
+                string pathSegment = "path=color:0x0000ff|weight:4|" + origin + "|" + destination;
+                string markersJoined = string.Join("&", markerSegments.ToArray());
+
+                string query = "size=600x350&" + pathSegment + "&" + markersJoined + "&key=" + mapKey;
+
+                model.MapImageUrl = baseUrl + "?" + query;
+            }
+            else
+            {
+                model.MapImageUrl = null;
             }
 
 
             model.Items = list;
             model.Total = total;
+            string mapUrl = BuildMapFromSavedSearch(userId);
+            model.MapImageUrl = mapUrl;
+
+
 
             DataSet dsCards = _sp.ListPaymentMethods(userId);
             if (dsCards != null && dsCards.Tables.Count > 0 && dsCards.Tables[0].Rows.Count > 0)
@@ -443,5 +494,93 @@ namespace CoreTripRex.Controllers
             return model;
 
         }
+        private (string Origin, string Destination)? GetSavedCities(int userId)
+        {
+            try
+            {
+                SqlCommand cmd = new SqlCommand
+                {
+                    CommandType = CommandType.StoredProcedure,
+                    CommandText = "usp_Get_Saved_Search"
+                };
+                cmd.Parameters.AddWithValue("@UserID", userId);
+
+                DBConnect objDB = new DBConnect();
+                DataSet ds = objDB.GetDataSetUsingCmdObj(cmd);
+
+                if (ds.Tables.Count > 0 && ds.Tables[0].Rows.Count > 0)
+                {
+                    DataRow row = ds.Tables[0].Rows[0];
+
+                    if (row["last_search"] != DBNull.Value)
+                    {
+                        byte[] byteArray = (byte[])row["last_search"];
+                        string json = Encoding.UTF8.GetString(byteArray);
+                        SavedSearch saved = JsonSerializer.Deserialize<SavedSearch>(json);
+
+                        if (saved != null)
+                        {
+                            return (saved.Origin, saved.Destination);
+                        }
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            return null;
+        }
+
+        private string BuildMapFromSavedSearch(int userId)
+        {
+            string mapKey = _configuration["GoogleMaps:ApiKey"];
+            if (string.IsNullOrWhiteSpace(mapKey))
+            {
+                return null;
+            }
+
+            var cities = GetSavedCities(userId);
+            if (cities == null)
+            {
+                return null;
+            }
+
+            string originCity = cities.Value.Origin;
+            string destinationCity = cities.Value.Destination;
+
+            if (string.IsNullOrWhiteSpace(originCity) || string.IsNullOrWhiteSpace(destinationCity))
+            {
+                return null;
+            }
+
+            if (!CityCoordinates.ContainsKey(originCity))
+            {
+                return null;
+            }
+
+            if (!CityCoordinates.ContainsKey(destinationCity))
+            {
+                return null;
+            }
+
+            string originCoord = CityCoordinates[originCity];
+            string destinationCoord = CityCoordinates[destinationCity];
+
+            List<string> markerSegments = new List<string>();
+            markerSegments.Add("markers=color:green|label:C|" + originCoord);
+            markerSegments.Add("markers=color:red|label:D|" + destinationCoord);
+
+            string pathSegment = "path=color:0x0000ff|weight:4|" + originCoord + "|" + destinationCoord;
+            string markersJoined = string.Join("&", markerSegments.ToArray());
+
+            string baseUrl = "https://maps.googleapis.com/maps/api/staticmap";
+            string query = "size=600x350&" + pathSegment + "&" + markersJoined + "&key=" + mapKey;
+
+            string url = baseUrl + "?" + query;
+            return url;
+        }
+
+
     }
 }

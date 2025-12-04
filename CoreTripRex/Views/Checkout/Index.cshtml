@@ -59,6 +59,22 @@
             </div>
         }
 
+        @if (!string.IsNullOrWhiteSpace(Model.MapImageUrl))
+        {
+            <div class="mt-4">
+                <h5>Your route and stops</h5>
+                <img src="@Model.MapImageUrl"
+                     alt="Trip map"
+                     class="img-fluid rounded" />
+
+                <div class="mt-2 text-muted small">
+                    C marks your current location. D marks your destination.
+                </div>
+            </div>
+        }
+
+
+
 
         <form asp-action="Index" method="post" class="mt-4">
             <div class="mb-3">
