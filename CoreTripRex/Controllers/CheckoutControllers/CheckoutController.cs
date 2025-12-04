@@ -614,16 +614,17 @@ namespace CoreTripRex.Controllers
 
                     if (type == "Hotel")
                     {
-                        string hotelCoord = OffsetCoordinate(destinationCoord, rand, 2.0);
+                        string hotelCoord = OffsetCoordinate(destinationCoord, rand, 3.5);
                         markerSegments.Add("markers=color:blue|label:H|" + hotelCoord);
                     }
                     else if (type == "Event")
                     {
-                        string eventCoord = OffsetCoordinate(destinationCoord, rand, 1.8);
+                        string eventCoord = OffsetCoordinate(destinationCoord, rand, 3.0);
                         markerSegments.Add("markers=color:orange|label:E|" + eventCoord);
                     }
                 }
             }
+
 
             string pathSegment = "path=color:0x0000ff|weight:4|" + originCoord + "|" + destinationCoord;
             string markersJoined = string.Join("&", markerSegments.ToArray());
