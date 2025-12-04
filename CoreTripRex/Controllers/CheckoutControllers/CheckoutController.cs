@@ -464,8 +464,9 @@ namespace CoreTripRex.Controllers
 
             model.Items = list;
             model.Total = total;
-            string mapUrl = BuildMapFromSavedSearch(userId);
+            string mapUrl = BuildMapFromSavedSearch(userId, items);
             model.MapImageUrl = mapUrl;
+
 
 
 
@@ -532,7 +533,7 @@ namespace CoreTripRex.Controllers
             return null;
         }
 
-        private string BuildMapFromSavedSearch(int userId)
+        private string BuildMapFromSavedSearch(int userId, DataTable items)
         {
             string mapKey = _configuration["GoogleMaps:ApiKey"];
             if (string.IsNullOrWhiteSpace(mapKey))
@@ -571,6 +572,36 @@ namespace CoreTripRex.Controllers
             markerSegments.Add("markers=color:green|label:C|" + originCoord);
             markerSegments.Add("markers=color:red|label:D|" + destinationCoord);
 
+            Random rand = new Random();
+            int hotelCount = 0;
+            int eventCount = 0;
+
+            if (items != null)
+            {
+                foreach (DataRow r in items.Rows)
+                {
+                    if (r["service_type"] == DBNull.Value)
+                    {
+                        continue;
+                    }
+
+                    string type = r["service_type"].ToString();
+
+                    if (type == "Hotel")
+                    {
+                        string hotelCoord = OffsetCoordinate(destinationCoord, rand, 0.12);
+                        markerSegments.Add("markers=color:blue|label:H|" + hotelCoord);
+                        hotelCount = hotelCount + 1;
+                    }
+                    else if (type == "Event")
+                    {
+                        string eventCoord = OffsetCoordinate(destinationCoord, rand, 0.10);
+                        markerSegments.Add("markers=color:orange|label:E|" + eventCoord);
+                        eventCount = eventCount + 1;
+                    }
+                }
+            }
+
             string pathSegment = "path=color:0x0000ff|weight:4|" + originCoord + "|" + destinationCoord;
             string markersJoined = string.Join("&", markerSegments.ToArray());
 
@@ -580,6 +611,45 @@ namespace CoreTripRex.Controllers
             string url = baseUrl + "?" + query;
             return url;
         }
+
+        private string OffsetCoordinate(string baseCoord, Random rand, double maxOffsetDegrees)
+        {
+            if (string.IsNullOrWhiteSpace(baseCoord))
+            {
+                return baseCoord;
+            }
+
+            string[] parts = baseCoord.Split(',');
+            if (parts.Length != 2)
+            {
+                return baseCoord;
+            }
+
+            double lat;
+            double lng;
+
+            if (!double.TryParse(parts[0], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out lat))
+            {
+                return baseCoord;
+            }
+
+            if (!double.TryParse(parts[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out lng))
+            {
+                return baseCoord;
+            }
+
+            double latOffset = (rand.NextDouble() - 0.5) * maxOffsetDegrees;
+            double lngOffset = (rand.NextDouble() - 0.5) * maxOffsetDegrees;
+
+            double newLat = lat + latOffset;
+            double newLng = lng + lngOffset;
+
+            string latText = newLat.ToString("0.######", System.Globalization.CultureInfo.InvariantCulture);
+            string lngText = newLng.ToString("0.######", System.Globalization.CultureInfo.InvariantCulture);
+
+            return latText + "," + lngText;
+        }
+
 
 
     }
