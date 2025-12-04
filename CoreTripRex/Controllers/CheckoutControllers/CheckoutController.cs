@@ -8,13 +8,14 @@ using ScottPlot;
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Data.SqlClient;
+using System.Globalization;
 using System.Net;
+using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 using TripRexLibraries;
 using Utilities;
-using System.Data.SqlClient;
-using System.Text;
-using System.Text.Json;
 
 
 
@@ -470,6 +471,7 @@ namespace CoreTripRex.Controllers
 
 
 
+
             DataSet dsCards = _sp.ListPaymentMethods(userId);
             if (dsCards != null && dsCards.Tables.Count > 0 && dsCards.Tables[0].Rows.Count > 0)
             {
@@ -568,13 +570,36 @@ namespace CoreTripRex.Controllers
             string originCoord = CityCoordinates[originCity];
             string destinationCoord = CityCoordinates[destinationCity];
 
+            string centerCoord = destinationCoord;
+
+            string[] oParts = originCoord.Split(',');
+            string[] dParts = destinationCoord.Split(',');
+
+            double oLat;
+            double oLng;
+            double dLat;
+            double dLng;
+
+            if (oParts.Length == 2 && dParts.Length == 2 &&
+                double.TryParse(oParts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out oLat) &&
+                double.TryParse(oParts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out oLng) &&
+                double.TryParse(dParts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out dLat) &&
+                double.TryParse(dParts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out dLng))
+            {
+                double centerLat = (oLat + dLat) / 2.0;
+                double centerLng = (oLng + dLng) / 2.0;
+
+                string centerLatText = centerLat.ToString("0.######", CultureInfo.InvariantCulture);
+                string centerLngText = centerLng.ToString("0.######", CultureInfo.InvariantCulture);
+
+                centerCoord = centerLatText + "," + centerLngText;
+            }
+
             List<string> markerSegments = new List<string>();
             markerSegments.Add("markers=color:green|label:C|" + originCoord);
             markerSegments.Add("markers=color:red|label:D|" + destinationCoord);
 
             Random rand = new Random();
-            int hotelCount = 0;
-            int eventCount = 0;
 
             if (items != null)
             {
@@ -589,15 +614,13 @@ namespace CoreTripRex.Controllers
 
                     if (type == "Hotel")
                     {
-                        string hotelCoord = OffsetCoordinate(destinationCoord, rand, 0.12);
+                        string hotelCoord = OffsetCoordinate(destinationCoord, rand, 2.0);
                         markerSegments.Add("markers=color:blue|label:H|" + hotelCoord);
-                        hotelCount = hotelCount + 1;
                     }
                     else if (type == "Event")
                     {
-                        string eventCoord = OffsetCoordinate(destinationCoord, rand, 0.10);
+                        string eventCoord = OffsetCoordinate(destinationCoord, rand, 1.8);
                         markerSegments.Add("markers=color:orange|label:E|" + eventCoord);
-                        eventCount = eventCount + 1;
                     }
                 }
             }
@@ -606,11 +629,18 @@ namespace CoreTripRex.Controllers
             string markersJoined = string.Join("&", markerSegments.ToArray());
 
             string baseUrl = "https://maps.googleapis.com/maps/api/staticmap";
-            string query = "size=600x350&" + pathSegment + "&" + markersJoined + "&key=" + mapKey;
+
+            string query = "size=1200x450"
+                + "&center=" + centerCoord
+                + "&zoom=4"
+                + "&" + pathSegment
+                + "&" + markersJoined
+                + "&key=" + mapKey;
 
             string url = baseUrl + "?" + query;
             return url;
         }
+
 
         private string OffsetCoordinate(string baseCoord, Random rand, double maxOffsetDegrees)
         {
@@ -649,6 +679,7 @@ namespace CoreTripRex.Controllers
 
             return latText + "," + lngText;
         }
+
 
 
 

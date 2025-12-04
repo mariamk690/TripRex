@@ -63,16 +63,20 @@
         {
             <div class="mt-4">
                 <h5>Your route and stops</h5>
-                <img src="@Model.MapImageUrl"
-                     alt="Trip map"
-                     class="img-fluid rounded" />
+
+                <div class="w-100">
+                    <img src="@Model.MapImageUrl"
+                         alt="Trip map"
+                         class="img-fluid w-100 rounded"
+                         style="max-height:500px; object-fit:cover;" />
+                </div>
 
                 <div class="mt-2 text-muted small">
                     C marks your current location. D marks your destination. H marks hotels in your package. E marks events.
                 </div>
-
             </div>
         }
+
 
 
 
