@@ -127,6 +127,33 @@ namespace Utilities
             DataSet ds = db.GetDataSet(sql);
             return ds;
         }
+        public int ApiEventInsert(int apiEventId, string name, string venue,
+                          decimal price, DateTime start, DateTime end)
+        {
+            DBConnect db = new DBConnect();
+            SqlCommand cmd = new SqlCommand
+            {
+                CommandType = CommandType.StoredProcedure,
+                CommandText = "usp_ApiEvent_Insert"
+            };
+
+            cmd.Parameters.AddWithValue("@api_event_id", apiEventId);
+            cmd.Parameters.AddWithValue("@name", name);
+            cmd.Parameters.AddWithValue("@venue", venue);
+            cmd.Parameters.AddWithValue("@price", price);
+            cmd.Parameters.AddWithValue("@start_time", start);
+            cmd.Parameters.AddWithValue("@end_time", end);
+
+            DataSet ds = db.GetDataSetUsingCmdObj(cmd);
+
+            if (ds != null && ds.Tables.Count > 0 && ds.Tables[0].Rows.Count > 0)
+            {
+                return Convert.ToInt32(ds.Tables[0].Rows[0][0]);
+            }
+
+            throw new Exception("ApiEventInsert failed: No return value.");
+        }
+
         public DataSet EventSearch(int cityId, DateTime startUtc, DateTime endUtc)
         {
             SqlCommand sql = new SqlCommand("usp_Events_Search");

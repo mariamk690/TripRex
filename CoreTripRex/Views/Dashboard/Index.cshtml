@@ -145,12 +145,12 @@
 														<div>
 															<div class="fw-medium">Flight @f.FlightNumber</div>
 															<div class="text-muted small">@f.DepartCode → @f.ArriveCode</div>
-															<div class="text-muted small">@f.DepartTime:g → @f.ArriveTime:g</div>
+															<div class="text-muted small">@f.DepartTime → @f.ArriveTime</div>
 															<div class="text-muted small">Class: @f.ClassCode</div>
 														</div>
 
 														<div class="text-end">
-															<div class="fw-semibold text-primary mb-1">$@f.Price:F2</div>
+															<div class="fw-semibold text-primary mb-1">$@f.Price</div>
 
 															<div class="d-flex flex-column gap-1">
 
@@ -210,7 +210,7 @@
 													View Rooms
 												</button>
 
-												<span class="fw-semibold text-primary">$@h.StartingPrice:F2/night</span>
+												<span class="fw-semibold text-primary">$@h.StartingPrice/night</span>
 											</div>
 										</div>
 
@@ -229,7 +229,7 @@
 
 																<div class="card-body text-center">
 																	<p class="text-muted small mb-1">Max Guests: @r.MaxOccupancy</p>
-																	<p class="fw-semibold text-primary mb-2">$@r.PricePerNight:F2/night</p>
+																	<p class="fw-semibold text-primary mb-2">$@r.PricePerNight/night</p>
 
 																	<form method="post" asp-action="AddRoom">
 																		<input type="hidden" name="roomId" value="@r.ID" />
@@ -291,7 +291,7 @@
 														data-bs-target="#cars_@c.VendorID">
 													View Cars
 												</button>
-												<span class="fw-semibold text-primary">from $@c.StartingPrice:F2/day</span>
+												<span class="fw-semibold text-primary">from $@c.StartingPrice/day</span>
 											</div>
 										</div>
 
@@ -312,7 +312,7 @@
 																	<p class="text-muted small mb-1">
 																		@car.CarClass • Seats: @car.Seats
 																	</p>
-																	<p class="fw-semibold text-primary mb-2">$@car.DailyRate:F2/day</p>
+																	<p class="fw-semibold text-primary mb-2">$@car.DailyRate/day</p>
 
 																	<form method="post" asp-action="AddCar">
 																		<input type="hidden" name="carId" value="@car.ID" />
@@ -393,7 +393,7 @@
 													<li class="list-group-item d-flex justify-content-between align-items-center">
 														<div>
 															<div class="fw-medium">@ev.Name</div>
-															<div class="text-muted small">@ev.StartTime:ddd, MMM d • h:mm tt</div>
+															<div class="text-muted small"> @ev.StartTime.ToString("ddd, MMM d • h:mm tt")</div>
 														</div>
 
 														<div class="text-end">
@@ -402,9 +402,15 @@
 															</div>
 
 															<form method="post" asp-action="AddEvent">
-																<input type="hidden" name="eventId" value="@ev.ID" />
+																<input type="hidden" name="apiEventId" value="@ev.ID" />
+																<input type="hidden" name="name" value="@ev.Name" />
+																<input type="hidden" name="venue" value="@e.Venue" />
+																<input type="hidden" name="price" value="@ev.Price" />
+																<input type="hidden" name="start" value="@ev.StartTime.ToString("o")" />
+																<input type="hidden" name="end" value="@ev.StartTime.AddHours(2).ToString("o")" />
 																<button type="submit" class="btn btn-success btn-sm">Add</button>
 															</form>
+
 														</div>
 													</li>
 												}
@@ -443,9 +449,9 @@
 									</div>
 
 									<div class="text-end">
-										<div class="fw-semibold text-primary">$@item.ItemPrice:F2</div>
+										<div class="fw-semibold text-primary">$@item.ItemPrice</div>
 										<div class="text-muted small">
-											x @item.Quantity = $@item.ComputedPrice:F2
+											x @item.Quantity = $@item.ComputedPrice
 										</div>
 									</div>
 
@@ -454,7 +460,7 @@
 						}
 
 						<div class="d-flex justify-content-between align-items-center mt-3">
-							<div class="fw-bold">Total: $@Model.Cart.Total:F2</div>
+							<div class="fw-bold">Total: $@Model.Cart.Total</div>
 
 							<div class="d-flex gap-2">
 								<a href="~/CurrentPackage" class="btn btn-primary btn-sm">View all</a>
