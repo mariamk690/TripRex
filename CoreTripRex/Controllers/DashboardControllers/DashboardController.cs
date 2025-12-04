@@ -1,6 +1,7 @@
 ﻿using CoreTripRex.Models;
 using CoreTripRex.Models.CarAPI;
 using CoreTripRex.Models.Dashboard;
+using CoreTripRex.Models.EventAPI;
 using CoreTripRex.Services;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -19,10 +20,12 @@ namespace CoreTripRex.Controllers.DashboardControllers
         private readonly UserManager<AppUser> _userManager;
         private static readonly Random rand = new Random();
         private readonly CarApiService _carApi;
-        public DashboardController(UserManager<AppUser> userManager, CarApiService carApi)
+        private readonly EventApiService _eventApi;
+        public DashboardController(UserManager<AppUser> userManager, CarApiService carApi, EventApiService eventApi)
         {
             _userManager = userManager;
             _carApi = carApi;
+            _eventApi = eventApi;
         }
 
         [HttpGet]
@@ -174,7 +177,7 @@ namespace CoreTripRex.Controllers.DashboardControllers
                     try
                     {
                         string city = model.Destination;
-                        string state = ResolveState(city);
+                        string state = ResolveStateAbb(city);
 
                         var agencies = await _carApi.GetAgencies(city, state);
 
@@ -227,13 +230,17 @@ namespace CoreTripRex.Controllers.DashboardControllers
                 {
                     try
                     {
-                        var dsEvents = sp.EventSearch(destCityId, startDate, endDate);
-                        model.EventVendors = LoadEventsVm(dsEvents);
-                        model.ShowEvents = model.EventVendors.Count > 0;
+                        string city = model.Destination;
+                        string state = ResolveStateFull(city);
+
+                        var activities = await _eventApi.GetActivities(city, state);
+
+                        model.EventVendors = ConvertApiEventsToVm(activities);
+                        model.ShowEvents = model.EventVendors.Any();
                     }
                     catch (Exception ex)
                     {
-                        model.ErrorMessage = "Event error: " + ex.Message;
+                        model.ErrorMessage = "Event API error: " + ex.Message;
                         model.ShowEvents = false;
                     }
                 }
@@ -292,10 +299,23 @@ namespace CoreTripRex.Controllers.DashboardControllers
         [HttpPost]
         [ValidateAntiForgeryToken]
         public IActionResult AddRoom(int roomId) => AddToPackage("Hotel", roomId);
-
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public IActionResult AddEvent(int eventId) => AddToPackage("Event", eventId);
+        public IActionResult AddEvent(int apiEventId, string name, string venue,
+                                      decimal price, DateTime start, DateTime end)
+        {
+            try
+            {
+                int localEventId = sp.ApiEventInsert(apiEventId, name, venue, price, start, end);
+                return AddToPackage("Event", localEventId);
+            }
+            catch (Exception ex)
+            {
+                TempData["DashboardError"] = "Event add error: " + ex.Message;
+                return RedirectToAction("Index");
+            }
+        }
+
 
         private IActionResult AddToPackage(string type, int refId)
         {
@@ -656,6 +676,47 @@ namespace CoreTripRex.Controllers.DashboardControllers
 
             return result;
         }
+        private List<EventVendorVM> ConvertApiEventsToVm(List<Activity> activities)
+        {
+            var list = new List<EventVendorVM>();
+
+            DateTime tripStart = DateTime.Today;
+            var tripStartStr = HttpContext.Session.GetString("TripStart");
+            if (DateTime.TryParse(tripStartStr, out var ts))
+                tripStart = ts;
+
+            foreach (var group in activities.GroupBy(a => a.VenueName))
+            {
+                var vendor = new EventVendorVM
+                {
+                    Organizer = group.Key,     
+                    Venue = group.Key,
+                    Caption = "Events during your stay",
+                    ImageUrl = Url.Content("~/images/placeholders/event.png")
+                };
+
+                foreach (var a in group)
+                {
+                    DateTime start = tripStart.Date;
+                    if (TimeSpan.TryParse(a.StartTime, out var time))
+                        start = start.Date + time;
+
+                    vendor.Events.Add(new EventOptionVM
+                    {
+                        ID = a.EventID,
+                        Name = a.Title,
+                        StartTime = start,
+                        Price = a.Price
+                    });
+                }
+
+                list.Add(vendor);
+            }
+
+            return list;
+        }
+
+
 
         private CartVM LoadCartVm(int userId, DashboardViewModel model)
         {
@@ -742,7 +803,7 @@ namespace CoreTripRex.Controllers.DashboardControllers
             return cart;
         }
 
-        private string ResolveState(string city)
+        private string ResolveStateAbb(string city)
         {
             if (string.IsNullOrWhiteSpace(city))
                 return "NA";
@@ -754,6 +815,18 @@ namespace CoreTripRex.Controllers.DashboardControllers
                 "philadelphia" => "PA",
                 "las vegas" => "NV",
                 "orlando" => "FL",
+                _ => "NA"
+            };
+        }
+        private string ResolveStateFull(string city)
+        {
+            city = city.Trim().ToLower();
+
+            return city switch
+            {
+                "philadelphia" => "Pennsylvania",
+                "las vegas" => "Nevada",
+                "orlando" => "Florida",
                 _ => "NA"
             };
         }

@@ -14,6 +14,7 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
     )
 );
 builder.Services.AddHttpClient<CarApiService>();
+builder.Services.AddHttpClient<EventApiService>();
 
 // ------------------- IDENTITY -------------------
 builder.Services.AddIdentity<AppUser, IdentityRole>(options =>
@@ -48,7 +49,6 @@ builder.Services.ConfigureApplicationCookie(options =>
     options.LoginPath = "/Account/Login";
     options.LogoutPath = "/Account/Logout";
 
-    //  Prevent persistent cookie
     options.Events.OnSigningIn = ctx =>
     {
         ctx.Properties.IsPersistent = false;
@@ -77,7 +77,6 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-app.UseDefaultFiles();
 app.UseStaticFiles();
 
 app.UseRouting();
