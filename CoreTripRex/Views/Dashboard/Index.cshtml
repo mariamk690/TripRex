@@ -1,6 +1,9 @@
 ﻿@model CoreTripRex.Models.Dashboard.DashboardViewModel
 @{
 	ViewData["Title"] = "Plan Your Vacation";
+	var addEventSeatsUrl = Url.Action("AddEventWithSeats", "Dashboard");
+	var addFlightSeatsUrl = Url.Action("AddFlightWithSeats", "Dashboard");
+	var getSeatsUrl = Url.Action("GetSeats", "Flights", new { area = "" });
 }
 
 <section class="py-5">
@@ -543,7 +546,7 @@
 			var modal = new bootstrap.Modal(document.getElementById("seatModal"));
 			modal.show();
 
-			fetch("/api/Flights/GetSeats?flightId=" + flightId)
+			fetch("@getSeatsUrl?flightId=" + flightId)
 				.then(function (res) { return res.json(); })
 				.then(function (seats) { renderSeatGrid(seats); })
 				.catch(function () { alert("Error loading seat chart"); });
@@ -646,7 +649,7 @@
 			form.method = "POST";
 
 			if (currentSeatMode === "flight") {
-				form.action = "/Dashboard/AddFlightWithSeats";
+				form.action = "@addFlightSeatsUrl";
 
 				var flightInput = document.createElement("input");
 				flightInput.type = "hidden";
@@ -660,7 +663,7 @@
 				qtyInput.value = selectedSeats.length;
 				form.appendChild(qtyInput);
 			} else if (currentSeatMode === "event" && selectedEventData) {
-				form.action = "/Dashboard/AddEventWithSeats";
+				form.action = "@addEventSeatsUrl";
 
 				var idInput = document.createElement("input");
 				idInput.type = "hidden";
