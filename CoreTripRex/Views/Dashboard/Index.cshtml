@@ -397,12 +397,12 @@
 															<div class="fw-semibold mb-2">
 																@(ev.Price == 0 ? "Free" : $"${ev.Price:F2}")
 															</div>
-
 															<button type="button"
 																	class="btn btn-outline-primary btn-sm mb-2"
-																	onclick="openEventSeatChart(@ev.ID)">
+																	onclick="openEventSeatChart(@ev.ID,'@ev.Name.Replace("'", "\\'")','@e.Venue.Replace("'", "\\'")',@ev.Price,'@ev.StartTime.ToString("o")','@ev.StartTime.AddHours(2).ToString("o")')">
 																Choose Seat
 															</button>
+
 
 															<form id="eventForm_@ev.ID" method="post" asp-action="AddEvent">
 																<input type="hidden" name="apiEventId" value="@ev.ID" />
