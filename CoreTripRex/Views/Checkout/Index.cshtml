@@ -59,6 +59,24 @@
             </div>
         }
 
+        @if (!string.IsNullOrWhiteSpace(Model.MapImageUrl))
+        {
+            <div class="mt-4">
+                <h5>Your route and stops</h5>
+
+                <div class="w-100">
+                    <img src="@Model.MapImageUrl"
+                         alt="Trip map"
+                         class="img-fluid w-100 rounded"
+                         style="max-height:500px; object-fit:cover;" />
+                </div>
+
+                <div class="mt-2 text-muted small">
+                    The green pin shows where you're starting, the red pin shows your destination, blue pins are hotels in your package, and orange pins are events.
+                </div>
+
+            </div>
+        }
 
         <form asp-action="Index" method="post" class="mt-4">
             <div class="mb-3">

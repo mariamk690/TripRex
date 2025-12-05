@@ -1,15 +1,23 @@
 ﻿using CoreTripRex.Models;
 using CoreTripRex.Models.Checkout;
+using CoreTripRex.Services;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 using ScottPlot;
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Data.SqlClient;
+using System.Globalization;
+using System.Net;
+using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 using TripRexLibraries;
 using Utilities;
-using CoreTripRex.Services;
+
+
 
 namespace CoreTripRex.Controllers
 {
@@ -18,13 +26,25 @@ namespace CoreTripRex.Controllers
         private readonly StoredProcs _sp;
         private readonly UserManager<AppUser> _userManager;
         private readonly IEmailService _emailService;
+        private readonly IConfiguration _configuration;
 
-        public CheckoutController(UserManager<AppUser> userManager, IEmailService emailService)
+
+        public CheckoutController(UserManager<AppUser> userManager, IEmailService emailService, IConfiguration configuration)
         {
             _sp = new StoredProcs();
             _userManager = userManager;
             _emailService = emailService;
+            _configuration = configuration;
         }
+        private static readonly Dictionary<string, string> CityCoordinates =
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                { "Philadelphia", "39.9526,-75.1652" },
+                { "Las Vegas", "36.1699,-115.1398" },
+                { "Orlando", "28.5383,-81.3792" }
+            };
+
+
 
         [HttpGet]
         public async Task<IActionResult> Index()
@@ -248,6 +268,7 @@ namespace CoreTripRex.Controllers
 
         private async Task<CheckoutViewModel> LoadCheckoutViewModel()
         {
+
             var model = new CheckoutViewModel();
 
             var user = await _userManager.GetUserAsync(User);
@@ -412,11 +433,44 @@ namespace CoreTripRex.Controllers
                 byte[] bytes = plt.GetImageBytes(600, 400, ScottPlot.ImageFormat.Png);
                 string base64 = Convert.ToBase64String(bytes);
                 model.ChartImageUrl = "data:image/png;base64," + base64;
+
+
+            }
+
+            //google maps api
+            string mapKey = _configuration["GoogleMaps:ApiKey"];
+            if (!string.IsNullOrWhiteSpace(mapKey))
+            {
+                string baseUrl = "https://maps.googleapis.com/maps/api/staticmap";
+
+                string origin = "39.9526,-75.1652";
+                string destination = "25.7617,-80.1918";
+
+                List<string> markerSegments = new List<string>();
+                markerSegments.Add("markers=color:blue|label:H|25.7906,-80.1300");
+                markerSegments.Add("markers=color:red|label:E|25.7743,-80.1937");
+
+                string pathSegment = "path=color:0x0000ff|weight:4|" + origin + "|" + destination;
+                string markersJoined = string.Join("&", markerSegments.ToArray());
+
+                string query = "size=600x350&" + pathSegment + "&" + markersJoined + "&key=" + mapKey;
+
+                model.MapImageUrl = baseUrl + "?" + query;
+            }
+            else
+            {
+                model.MapImageUrl = null;
             }
 
 
             model.Items = list;
             model.Total = total;
+            string mapUrl = BuildMapFromSavedSearch(userId, items);
+            model.MapImageUrl = mapUrl;
+
+
+
+
 
             DataSet dsCards = _sp.ListPaymentMethods(userId);
             if (dsCards != null && dsCards.Tables.Count > 0 && dsCards.Tables[0].Rows.Count > 0)
@@ -443,5 +497,192 @@ namespace CoreTripRex.Controllers
             return model;
 
         }
+        private (string Origin, string Destination)? GetSavedCities(int userId)
+        {
+            try
+            {
+                SqlCommand cmd = new SqlCommand
+                {
+                    CommandType = CommandType.StoredProcedure,
+                    CommandText = "usp_Get_Saved_Search"
+                };
+                cmd.Parameters.AddWithValue("@UserID", userId);
+
+                DBConnect objDB = new DBConnect();
+                DataSet ds = objDB.GetDataSetUsingCmdObj(cmd);
+
+                if (ds.Tables.Count > 0 && ds.Tables[0].Rows.Count > 0)
+                {
+                    DataRow row = ds.Tables[0].Rows[0];
+
+                    if (row["last_search"] != DBNull.Value)
+                    {
+                        byte[] byteArray = (byte[])row["last_search"];
+                        string json = Encoding.UTF8.GetString(byteArray);
+                        SavedSearch saved = JsonSerializer.Deserialize<SavedSearch>(json);
+
+                        if (saved != null)
+                        {
+                            return (saved.Origin, saved.Destination);
+                        }
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            return null;
+        }
+
+        private string BuildMapFromSavedSearch(int userId, DataTable items)
+        {
+            string mapKey = _configuration["GoogleMaps:ApiKey"];
+            if (string.IsNullOrWhiteSpace(mapKey))
+            {
+                return null;
+            }
+
+            var cities = GetSavedCities(userId);
+            if (cities == null)
+            {
+                return null;
+            }
+
+            string originCity = cities.Value.Origin;
+            string destinationCity = cities.Value.Destination;
+
+            if (string.IsNullOrWhiteSpace(originCity) || string.IsNullOrWhiteSpace(destinationCity))
+            {
+                return null;
+            }
+
+            if (!CityCoordinates.ContainsKey(originCity))
+            {
+                return null;
+            }
+
+            if (!CityCoordinates.ContainsKey(destinationCity))
+            {
+                return null;
+            }
+
+            string originCoord = CityCoordinates[originCity];
+            string destinationCoord = CityCoordinates[destinationCity];
+
+            string centerCoord = destinationCoord;
+
+            string[] oParts = originCoord.Split(',');
+            string[] dParts = destinationCoord.Split(',');
+
+            double oLat;
+            double oLng;
+            double dLat;
+            double dLng;
+
+            if (oParts.Length == 2 && dParts.Length == 2 &&
+                double.TryParse(oParts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out oLat) &&
+                double.TryParse(oParts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out oLng) &&
+                double.TryParse(dParts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out dLat) &&
+                double.TryParse(dParts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out dLng))
+            {
+                double centerLat = (oLat + dLat) / 2.0;
+                double centerLng = (oLng + dLng) / 2.0;
+
+                string centerLatText = centerLat.ToString("0.######", CultureInfo.InvariantCulture);
+                string centerLngText = centerLng.ToString("0.######", CultureInfo.InvariantCulture);
+
+                centerCoord = centerLatText + "," + centerLngText;
+            }
+
+            List<string> markerSegments = new List<string>();
+            markerSegments.Add("markers=color:green|label:C|" + originCoord);
+            markerSegments.Add("markers=color:red|label:D|" + destinationCoord);
+
+            Random rand = new Random();
+
+            if (items != null)
+            {
+                foreach (DataRow r in items.Rows)
+                {
+                    if (r["service_type"] == DBNull.Value)
+                    {
+                        continue;
+                    }
+
+                    string type = r["service_type"].ToString();
+
+                    if (type == "Hotel")
+                    {
+                        string hotelCoord = OffsetCoordinate(destinationCoord, rand, 3.5);
+                        markerSegments.Add("markers=color:blue|label:H|" + hotelCoord);
+                    }
+                    else if (type == "Event")
+                    {
+                        string eventCoord = OffsetCoordinate(destinationCoord, rand, 3.0);
+                        markerSegments.Add("markers=color:orange|label:E|" + eventCoord);
+                    }
+                }
+            }
+
+
+            string pathSegment = "path=color:0x0000ff|weight:4|" + originCoord + "|" + destinationCoord;
+            string markersJoined = string.Join("&", markerSegments.ToArray());
+
+            string baseUrl = "https://maps.googleapis.com/maps/api/staticmap";
+
+            string query = "size=1200x450"
+                + "&center=" + centerCoord
+                + "&zoom=4"
+                + "&" + pathSegment
+                + "&" + markersJoined
+                + "&key=" + mapKey;
+
+            string url = baseUrl + "?" + query;
+            return url;
+        }
+
+
+        private string OffsetCoordinate(string baseCoord, Random rand, double maxOffsetDegrees)
+        {
+            if (string.IsNullOrWhiteSpace(baseCoord))
+            {
+                return baseCoord;
+            }
+
+            string[] parts = baseCoord.Split(',');
+            if (parts.Length != 2)
+            {
+                return baseCoord;
+            }
+
+            double lat;
+            double lng;
+
+            if (!double.TryParse(parts[0], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out lat))
+            {
+                return baseCoord;
+            }
+
+            if (!double.TryParse(parts[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out lng))
+            {
+                return baseCoord;
+            }
+
+            double latOffset = (rand.NextDouble() - 0.5) * maxOffsetDegrees;
+            double lngOffset = (rand.NextDouble() - 0.5) * maxOffsetDegrees;
+
+            double newLat = lat + latOffset;
+            double newLng = lng + lngOffset;
+
+            string latText = newLat.ToString("0.######", System.Globalization.CultureInfo.InvariantCulture);
+            string lngText = newLng.ToString("0.######", System.Globalization.CultureInfo.InvariantCulture);
+
+            return latText + "," + lngText;
+        }
+
+
+
+
     }
 }
