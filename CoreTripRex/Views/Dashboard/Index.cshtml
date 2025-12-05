@@ -136,7 +136,6 @@
 												<span class="fw-semibold text-primary small">Economy & Business</span>
 											</div>
 										</div>
-
 										<div id="flight_@vendor.Vendor.GetHashCode()" class="collapse border-top">
 											<ul class="list-group list-group-flush">
 												@foreach (var f in vendor.Options)
@@ -153,7 +152,6 @@
 															<div class="fw-semibold text-primary mb-1">$@f.Price</div>
 
 															<div class="d-flex flex-column gap-1">
-
 																<button type="button"
 																		class="btn btn-outline-primary btn-sm"
 																		onclick="openSeatChart(@f.FlightID)">
@@ -164,13 +162,13 @@
 																	<input type="hidden" name="flightId" value="@f.FlightID" />
 																	<button type="submit" class="btn btn-success btn-sm w-100">Add</button>
 																</form>
-
 															</div>
 														</div>
 													</li>
 												}
 											</ul>
 										</div>
+
 
 									</div>
 								</div>
@@ -395,23 +393,29 @@
 															<div class="fw-medium">@ev.Name</div>
 															<div class="text-muted small"> @ev.StartTime.ToString("ddd, MMM d • h:mm tt")</div>
 														</div>
-
 														<div class="text-end">
 															<div class="fw-semibold mb-2">
 																@(ev.Price == 0 ? "Free" : $"${ev.Price:F2}")
 															</div>
 
-															<form method="post" asp-action="AddEvent">
+															<button type="button"
+																	class="btn btn-outline-primary btn-sm mb-2"
+																	onclick="openEventSeatChart(@ev.ID)">
+																Choose Seat
+															</button>
+
+															<form id="eventForm_@ev.ID" method="post" asp-action="AddEvent">
 																<input type="hidden" name="apiEventId" value="@ev.ID" />
 																<input type="hidden" name="name" value="@ev.Name" />
 																<input type="hidden" name="venue" value="@e.Venue" />
 																<input type="hidden" name="price" value="@ev.Price" />
 																<input type="hidden" name="start" value="@ev.StartTime.ToString("o")" />
 																<input type="hidden" name="end" value="@ev.StartTime.AddHours(2).ToString("o")" />
-																<button type="submit" class="btn btn-success btn-sm">Add</button>
+																<button type="submit" class="btn btn-success btn-sm w-100">Add</button>
 															</form>
-
 														</div>
+
+
 													</li>
 												}
 											</ul>
@@ -515,43 +519,88 @@
 		</div>
 	</div>
 	<script>
-		let selectedSeats = [];  // <-- FIXED
+		let selectedSeats = [];
 		let selectedFlightId = null;
+		let currentSeatMode = null;
+		let selectedEventData = null;
 
 		function openSeatChart(flightId) {
+			currentSeatMode = "flight";
 			selectedFlightId = flightId;
-			selectedSeats = [];   // reset
+			selectedEventData = null;
+			selectedSeats = [];
 
-			document.getElementById("seat-loading").classList.remove("d-none");
-			document.getElementById("seat-grid").classList.add("d-none");
-			document.getElementById("confirmSeatBtn").classList.add("d-none");
-			document.getElementById("seat-selected").classList.add("d-none");
+			var loading = document.getElementById("seat-loading");
+			var grid = document.getElementById("seat-grid");
+			var confirmBtn = document.getElementById("confirmSeatBtn");
+			var selected = document.getElementById("seat-selected");
+
+			loading.classList.remove("d-none");
+			grid.classList.add("d-none");
+			confirmBtn.classList.add("d-none");
+			selected.classList.add("d-none");
 
 			var modal = new bootstrap.Modal(document.getElementById("seatModal"));
 			modal.show();
 
-			fetch(`/api/Flights/GetSeats?flightId=${flightId}`)
-				.then(res => res.json())
-				.then(seats => renderSeatGrid(seats))
-				.catch(() => alert("Error loading seat chart"));
+			fetch("/api/Flights/GetSeats?flightId=" + flightId)
+				.then(function (res) { return res.json(); })
+				.then(function (seats) { renderSeatGrid(seats); })
+				.catch(function () { alert("Error loading seat chart"); });
+		}
+
+		function openEventSeatChart(apiEventId, name, venue, price, startIso, endIso) {
+			currentSeatMode = "event";
+			selectedFlightId = null;
+			selectedEventData = {
+				apiEventId: apiEventId,
+				name: name,
+				venue: venue,
+				price: price,
+				start: startIso,
+				end: endIso
+			};
+			selectedSeats = [];
+
+			var loading = document.getElementById("seat-loading");
+			var grid = document.getElementById("seat-grid");
+			var confirmBtn = document.getElementById("confirmSeatBtn");
+			var selected = document.getElementById("seat-selected");
+
+			loading.classList.remove("d-none");
+			grid.classList.add("d-none");
+			confirmBtn.classList.add("d-none");
+			selected.classList.add("d-none");
+
+			var modal = new bootstrap.Modal(document.getElementById("seatModal"));
+			modal.show();
+
+			var seats = [];
+			var cols = ["A", "B", "C", "D", "E", "F"];
+			for (var row = 1; row <= 10; row++) {
+				for (var i = 0; i < cols.length; i++) {
+					seats.push({ seatNumber: row.toString() + cols[i], isAvailable: true });
+				}
+			}
+
+			renderSeatGrid(seats);
 		}
 
 		function renderSeatGrid(seats) {
-			const grid = document.getElementById("seat-grid");
+			var grid = document.getElementById("seat-grid");
 			grid.innerHTML = "";
 
-			let html = `<div class="d-flex flex-wrap gap-2 justify-content-center">`;
+			var html = '<div class="d-flex flex-wrap gap-2 justify-content-center">';
 
-			seats.forEach(seat => {
-				let cls = seat.isAvailable ? "btn-outline-success" : "btn-outline-secondary disabled";
+			seats.forEach(function (seat) {
+				var cls = seat.isAvailable ? "btn-outline-success" : "btn-outline-secondary disabled";
 
-				html += `
-					<button class="btn ${cls} seat-btn"
-							style="width:55px"
-							onclick="selectSeat('${seat.seatNumber}', ${seat.isAvailable}, this)">
-						${seat.seatNumber}
-					</button>
-				`;
+				html +=
+					'<button class="btn ' + cls + ' seat-btn" ' +
+					'style="width:55px" ' +
+					'onclick="selectSeat(\'' + seat.seatNumber + '\',' + seat.isAvailable + ', this)">' +
+					seat.seatNumber +
+					'</button>';
 			});
 
 			html += "</div>";
@@ -564,9 +613,8 @@
 		function selectSeat(seatNumber, available, el) {
 			if (!available) return;
 
-			// Toggle
-			if (selectedSeats.includes(seatNumber)) {
-				selectedSeats = selectedSeats.filter(s => s !== seatNumber);
+			if (selectedSeats.indexOf(seatNumber) !== -1) {
+				selectedSeats = selectedSeats.filter(function (s) { return s !== seatNumber; });
 				el.classList.remove("btn-primary");
 			} else {
 				selectedSeats.push(seatNumber);
@@ -577,7 +625,7 @@
 		}
 
 		function updateSeatDisplay() {
-			const msg = document.getElementById("seat-selected");
+			var msg = document.getElementById("seat-selected");
 
 			if (selectedSeats.length === 0) {
 				msg.classList.add("d-none");
@@ -585,37 +633,83 @@
 				return;
 			}
 
-			msg.innerHTML = `
-				Selected Seats:
-				<strong>${selectedSeats.join(", ")}</strong>
-			`;
+			msg.innerHTML = "Selected Seats: <strong>" + selectedSeats.join(", ") + "</strong>";
 
 			msg.classList.remove("d-none");
 			document.getElementById("confirmSeatBtn").classList.remove("d-none");
 		}
 
 		function confirmSeatSelection() {
-			const form = document.createElement("form");
+			if (selectedSeats.length === 0) return;
+
+			var form = document.createElement("form");
 			form.method = "POST";
-			form.action = "/Dashboard/AddFlightWithSeats";
 
-			const flightInput = document.createElement("input");
-			flightInput.type = "hidden";
-			flightInput.name = "flightId";
-			flightInput.value = selectedFlightId;
-			form.appendChild(flightInput);
+			if (currentSeatMode === "flight") {
+				form.action = "/Dashboard/AddFlightWithSeats";
 
-			// quantity = number of seats selected
-			const qtyInput = document.createElement("input");
-			qtyInput.type = "hidden";
-			qtyInput.name = "quantity";
-			qtyInput.value = selectedSeats.length;
-			form.appendChild(qtyInput);
+				var flightInput = document.createElement("input");
+				flightInput.type = "hidden";
+				flightInput.name = "flightId";
+				flightInput.value = selectedFlightId;
+				form.appendChild(flightInput);
+
+				var qtyInput = document.createElement("input");
+				qtyInput.type = "hidden";
+				qtyInput.name = "quantity";
+				qtyInput.value = selectedSeats.length;
+				form.appendChild(qtyInput);
+			} else if (currentSeatMode === "event" && selectedEventData) {
+				form.action = "/Dashboard/AddEventWithSeats";
+
+				var idInput = document.createElement("input");
+				idInput.type = "hidden";
+				idInput.name = "apiEventId";
+				idInput.value = selectedEventData.apiEventId;
+				form.appendChild(idInput);
+
+				var nameInput = document.createElement("input");
+				nameInput.type = "hidden";
+				nameInput.name = "name";
+				nameInput.value = selectedEventData.name;
+				form.appendChild(nameInput);
+
+				var venueInput = document.createElement("input");
+				venueInput.type = "hidden";
+				venueInput.name = "venue";
+				venueInput.value = selectedEventData.venue;
+				form.appendChild(venueInput);
+
+				var priceInput = document.createElement("input");
+				priceInput.type = "hidden";
+				priceInput.name = "price";
+				priceInput.value = selectedEventData.price;
+				form.appendChild(priceInput);
+
+				var startInput = document.createElement("input");
+				startInput.type = "hidden";
+				startInput.name = "start";
+				startInput.value = selectedEventData.start;
+				form.appendChild(startInput);
+
+				var endInput = document.createElement("input");
+				endInput.type = "hidden";
+				endInput.name = "end";
+				endInput.value = selectedEventData.end;
+				form.appendChild(endInput);
+
+				var qtyInput2 = document.createElement("input");
+				qtyInput2.type = "hidden";
+				qtyInput2.name = "quantity";
+				qtyInput2.value = selectedSeats.length;
+				form.appendChild(qtyInput2);
+			} else {
+				return;
+			}
 
 			document.body.appendChild(form);
 			form.submit();
 		}
-
 	</script>
 
 

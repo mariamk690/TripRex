@@ -315,6 +315,63 @@ namespace CoreTripRex.Controllers.DashboardControllers
                 return RedirectToAction("Index");
             }
         }
+        //event seating chart
+        [HttpPost]
+        //[ValidateAntiForgeryToken]
+        public ActionResult AddEventWithSeats(int apiEventId, string name, string venue,
+                                      decimal price, DateTime start, DateTime end,
+                                      int quantity)
+        {
+            try
+            {
+                int localEventId = sp.ApiEventInsert(apiEventId, name, venue, price, start, end);
+
+                var identityUser = _userManager.GetUserAsync(User).Result;
+                int? userId = identityUser != null && identityUser.LegacyUserId > 0
+                    ? identityUser.LegacyUserId
+                    : (int?)null;
+
+                if (!userId.HasValue)
+                {
+                    TempData["DashboardError"] = "Please sign in to add items to your cart.";
+                    return RedirectToAction("Index");
+                }
+
+                int packageId;
+                string packageIdStr = HttpContext.Session.GetString("PackageID");
+                int pid;
+                if (!string.IsNullOrEmpty(packageIdStr) && int.TryParse(packageIdStr, out pid))
+                {
+                    packageId = pid;
+                }
+                else
+                {
+                    packageId = sp.PackageGetOrCreate(userId.Value);
+                    HttpContext.Session.SetString("PackageID", packageId.ToString());
+                }
+
+                int result = sp.PackageAddUpdateItem(packageId, "Event", localEventId, quantity, start, end);
+
+                if (result >= 0 || result == -1)
+                {
+                    TempData["DashboardStatus"] = quantity.ToString() + " ticket(s) added to your cart.";
+                    TempData["DashboardError"] = null;
+                }
+                else
+                {
+                    TempData["DashboardError"] = "Failed to add event tickets to cart.";
+                }
+
+                return RedirectToAction("Index");
+            }
+            catch (Exception ex)
+            {
+                TempData["DashboardError"] = "Event seat error: " + ex.Message;
+                return RedirectToAction("Index");
+            }
+        }
+
+
 
 
         private IActionResult AddToPackage(string type, int refId)
